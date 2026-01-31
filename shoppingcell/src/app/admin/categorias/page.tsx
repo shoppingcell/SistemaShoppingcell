@@ -8,8 +8,7 @@ export default async function CategoriasPage() {
   const { data: rows, error } = await supabase
     .from('categories')
     .select('id,name,slug,sort,created_at')
-    .order('sort', { ascending: true })
-    .order('created_at', { ascending: false });
+    .order('name', { ascending: true });
 
   return (
     <div>
