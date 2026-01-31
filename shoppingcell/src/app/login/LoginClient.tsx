@@ -39,22 +39,20 @@ export default function LoginClient() {
     window.location.href = nextPath;
   }
 
-  async function onMagicLink() {
+  async function onForgotPassword() {
     setStatus(null);
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${window.location.origin}${nextPath}`,
-      },
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/login`,
     });
 
     if (error) {
       setStatus(error.message);
     } else {
-      setStatus('Link enviado. Verifique seu e-mail.');
+      setStatus('E-mail de recuperação enviado. Verifique sua caixa de entrada e spam.');
     }
+
     setLoading(false);
   }
 
@@ -114,6 +112,7 @@ export default function LoginClient() {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
           />
         </label>
 
@@ -127,15 +126,15 @@ export default function LoginClient() {
         <button
           type="button"
           disabled={loading || !email}
-          onClick={onMagicLink}
+          onClick={onForgotPassword}
           className="rounded-md border border-slate-700 bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
         >
-          Enviar link por e-mail (sem senha)
+          Esqueci minha senha
         </button>
 
         {status && <p className="text-sm text-slate-200">{status}</p>}
 
-        <p className="text-xs text-slate-500">Dica: você pode usar senha ou login por link (OTP).</p>
+        <p className="text-xs text-slate-500">Login por senha (recomendado). Use "Esqueci minha senha" para definir/recuperar.</p>
       </form>
     </div>
   );
