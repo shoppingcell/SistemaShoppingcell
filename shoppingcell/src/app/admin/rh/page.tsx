@@ -18,10 +18,19 @@ export default async function RhPage() {
     .order('paid_at', { ascending: false })
     .limit(300);
 
+  const { data: attendance, error: attErr } = await supabase
+    .from('hr_attendance')
+    .select('id,day,status,note')
+    .order('day', { ascending: false })
+    .limit(370);
+
   const missingEmployees = Boolean(
     empErr && /relation .*hr_employees.* does not exist/i.test(empErr.message),
   );
   const missingPayments = Boolean(payErr && /relation .*hr_payments.* does not exist/i.test(payErr.message));
+  const missingAttendance = Boolean(
+    attErr && /relation .*hr_attendance.* does not exist/i.test(attErr.message),
+  );
 
   // If tables aren't created yet, we render UI anyway with empty lists.
   if (empErr && !missingEmployees) {
@@ -48,10 +57,23 @@ export default async function RhPage() {
     );
   }
 
+  if (attErr && !missingAttendance) {
+    return (
+      <div className="rounded-3xl border border-red-500/20 bg-red-500/10 p-5 text-sm text-red-200">
+        <div className="font-semibold">Erro ao carregar RH (presenças)</div>
+        <div className="mt-2 opacity-90">{attErr.message}</div>
+        <div className="mt-3 text-xs text-red-200/80">
+          Rode o SQL: <code>supabase/admin_patch_hr_attendance.sql</code>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <RhClient
       employees={missingEmployees ? [] : ((employees as any) ?? [])}
       payments={missingPayments ? [] : ((payments as any) ?? [])}
+      attendance={missingAttendance ? [] : ((attendance as any) ?? [])}
     />
   );
 }

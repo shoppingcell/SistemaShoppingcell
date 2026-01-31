@@ -26,7 +26,35 @@ function money(n: number | null | undefined) {
   return `R$ ${Number(n).toFixed(2)}`;
 }
 
-export function RhClient({ employees, payments }: { employees: Employee[]; payments: Payment[] }) {
+type Attendance = {
+  id: string;
+  day: string; // yyyy-mm-dd
+  status: 'present' | 'absent' | 'note' | string;
+  note: string | null;
+};
+
+function isoDate(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
+
+function addDays(d: Date, days: number) {
+  const out = new Date(d);
+  out.setDate(out.getDate() + days);
+  return out;
+}
+
+export function RhClient({
+  employees,
+  payments,
+  attendance,
+}: {
+  employees: Employee[];
+  payments: Payment[];
+  attendance: Attendance[];
+}) {
   const [tab, setTab] = useState<'dashboard' | 'employees' | 'payments'>('dashboard');
 
   const activeEmployees = useMemo(() => employees.filter((e) => e.status === 'active').length, [employees]);
@@ -42,6 +70,39 @@ export function RhClient({ employees, payments }: { employees: Employee[]; payme
       })
       .reduce((a, p) => a + Number(p.amount || 0), 0);
   }, [payments]);
+
+  const attendanceByDay = useMemo(() => {
+    const m = new Map<string, Attendance>();
+    for (const a of attendance) m.set(a.day, a);
+    return m;
+  }, [attendance]);
+
+  const calendar = useMemo(() => {
+    const base = new Date();
+    const monthStart = new Date(base.getFullYear(), base.getMonth(), 1);
+    const startWeekday = monthStart.getDay();
+    const firstCell = addDays(monthStart, -startWeekday);
+
+    const cells: {
+      date: string;
+      inMonth: boolean;
+      status: string | null;
+      note: string | null;
+    }[] = [];
+
+    for (let i = 0; i < 42; i++) {
+      const d = addDays(firstCell, i);
+      const ds = isoDate(d);
+      const inMonth = d.getMonth() === monthStart.getMonth();
+      const a = attendanceByDay.get(ds);
+      cells.push({ date: ds, inMonth, status: a?.status ?? null, note: a?.note ?? null });
+    }
+
+    return {
+      monthLabel: monthStart.toLocaleString('pt-BR', { month: 'long', year: 'numeric' }),
+      cells,
+    };
+  }, [attendanceByDay]);
 
   return (
     <div className="grid gap-6">
@@ -111,15 +172,89 @@ export function RhClient({ employees, payments }: { employees: Employee[]; payme
           <div className="grid gap-4 lg:grid-cols-2">
             <Panel>
               <div className="border-b border-white/10 px-6 py-5">
-                <div className="text-sm font-semibold text-slate-200">Próximos passos</div>
-                <div className="mt-1 text-xs text-slate-500">(vamos completar o módulo todo)</div>
+                <div className="text-sm font-semibold text-slate-200">Presenças / Observações</div>
+                <div className="mt-1 text-xs text-slate-500 capitalize">{calendar.monthLabel}</div>
               </div>
-              <div className="px-6 py-6 text-sm text-slate-300">
-                <ul className="list-disc space-y-2 pl-5">
-                  <li>CRUD de funcionários (nome, cargo, salário, admissão, status).</li>
-                  <li>Pagamentos (gera saída no Financeiro automaticamente).</li>
-                  <li>Relatórios por mês/funcionário (custo total e média).</li>
-                </ul>
+
+              <div className="px-6 py-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="rounded-full bg-green-500/15 px-3 py-1 text-xs font-semibold text-green-300">
+                    Presente
+                  </div>
+                  <div className="rounded-full bg-red-500/15 px-3 py-1 text-xs font-semibold text-red-200">
+                    Falta
+                  </div>
+                  <div className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-200">
+                    Obs.
+                  </div>
+                  <div className="ml-auto text-xs text-slate-500">(sem vincular funcionário agora)</div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-7 gap-2 text-xs text-slate-500">
+                  {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((d) => (
+                    <div key={d} className="text-center">
+                      {d}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-3 grid grid-cols-7 gap-2">
+                  {calendar.cells.map((c) => {
+                    const day = c.date.split('-')[2];
+                    const dot =
+                      c.status === 'present'
+                        ? 'bg-green-400'
+                        : c.status === 'absent'
+                          ? 'bg-red-400'
+                          : c.status
+                            ? 'bg-amber-300'
+                            : null;
+
+                    return (
+                      <div
+                        key={c.date}
+                        title={
+                          c.note ? `${c.date} — ${c.note}` : c.status ? `${c.date} — ${c.status}` : c.date
+                        }
+                        className={
+                          'rounded-xl border p-2 ' +
+                          (c.inMonth
+                            ? 'border-white/10 bg-white/5'
+                            : 'border-white/5 bg-slate-950 text-slate-600')
+                        }
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="text-xs font-semibold text-slate-200">{Number(day)}</div>
+                          {dot && <div className={`h-2.5 w-2.5 rounded-full ${dot}`} />}
+                        </div>
+                        {c.note && (
+                          <div className="mt-1 line-clamp-2 text-[10px] text-slate-400">{c.note}</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-4 grid gap-2 rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Ações rápidas
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button className="rounded-full bg-green-500/15 px-4 py-2 text-xs font-semibold text-green-300 hover:bg-green-500/20">
+                      Marcar Presença (Hoje)
+                    </button>
+                    <button className="rounded-full bg-red-500/15 px-4 py-2 text-xs font-semibold text-red-200 hover:bg-red-500/20">
+                      Marcar Falta (Hoje)
+                    </button>
+                    <button className="rounded-full bg-amber-500/15 px-4 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-500/20">
+                      Adicionar Observação
+                    </button>
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    Vou ligar essas ações no banco quando rodarmos o SQL completo (tabela{' '}
+                    <span className="font-mono">hr_attendance</span>).
+                  </div>
+                </div>
               </div>
             </Panel>
 
