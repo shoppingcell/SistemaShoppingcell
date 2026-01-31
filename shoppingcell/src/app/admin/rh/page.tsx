@@ -1,21 +1,57 @@
+import { createSupabaseServerClient } from '@/lib/supabaseServer';
+import { RhClient } from '@/app/admin/rh/RhClient';
+
 export const dynamic = 'force-dynamic';
 
 export default async function RhPage() {
-  return (
-    <div className="grid gap-6">
-      <div>
-        <h1 className="text-2xl font-extrabold">RH</h1>
-        <p className="mt-1 text-sm text-slate-400">Módulo interno (funcionários, folha e despesas de RH).</p>
-      </div>
+  const supabase = await createSupabaseServerClient();
 
-      <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5 text-sm text-slate-300">
-        <div className="font-semibold text-slate-200">Próximos passos (MVP)</div>
-        <ul className="mt-3 list-disc space-y-2 pl-5">
-          <li>Cadastro de funcionários (nome, cargo, salário, data de admissão, status).</li>
-          <li>Lançamentos: salário/pagamentos (gera saída no Financeiro).</li>
-          <li>Relatórios: custo por dia/semana/mês.</li>
-        </ul>
+  const { data: employees, error: empErr } = await supabase
+    .from('hr_employees')
+    .select('id,name,role,salary,hired_at,status')
+    .order('created_at', { ascending: false })
+    .limit(300);
+
+  const { data: payments, error: payErr } = await supabase
+    .from('hr_payments')
+    .select('id,employee_id,description,amount,paid_at')
+    .order('paid_at', { ascending: false })
+    .limit(300);
+
+  const missingEmployees = Boolean(
+    empErr && /relation .*hr_employees.* does not exist/i.test(empErr.message),
+  );
+  const missingPayments = Boolean(payErr && /relation .*hr_payments.* does not exist/i.test(payErr.message));
+
+  // If tables aren't created yet, we render UI anyway with empty lists.
+  if (empErr && !missingEmployees) {
+    return (
+      <div className="rounded-3xl border border-red-500/20 bg-red-500/10 p-5 text-sm text-red-200">
+        <div className="font-semibold">Erro ao carregar RH (funcionários)</div>
+        <div className="mt-2 opacity-90">{empErr.message}</div>
+        <div className="mt-3 text-xs text-red-200/80">
+          Rode o SQL: <code>supabase/admin_patch_hr.sql</code>
+        </div>
       </div>
-    </div>
+    );
+  }
+
+  if (payErr && !missingPayments) {
+    return (
+      <div className="rounded-3xl border border-red-500/20 bg-red-500/10 p-5 text-sm text-red-200">
+        <div className="font-semibold">Erro ao carregar RH (pagamentos)</div>
+        <div className="mt-2 opacity-90">{payErr.message}</div>
+        <div className="mt-3 text-xs text-red-200/80">
+          Rode o SQL: <code>supabase/admin_patch_hr.sql</code>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <RhClient
+      employees={missingEmployees ? [] : ((employees as any) ?? [])}
+      payments={missingPayments ? [] : ((payments as any) ?? [])}
+    />
   );
 }
