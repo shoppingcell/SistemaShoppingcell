@@ -17,8 +17,8 @@ export default async function AdminHome() {
   const supabase = await createSupabaseServerClient();
 
   const [{ data: products }, { data: inventory }, { data: moves }] = await Promise.all([
-    supabase.from('products').select('id,active'),
-    supabase.from('inventory').select('product_id,quantity'),
+    supabase.from('products').select('id,active,price,cost_price,price_locked,cost_locked'),
+    supabase.from('inventory').select('product_id,quantity,min_quantity,quantity_locked,min_locked'),
     supabase
       .from('inventory_moves')
       .select('id,product_id,delta,reason,created_at')
@@ -28,10 +28,18 @@ export default async function AdminHome() {
 
   const productCount = (products ?? []).length;
   const activeCount = (products ?? []).filter((p) => p.active).length;
-  const totalQty = (inventory ?? []).reduce((acc, r) => acc + (r.quantity ?? 0), 0);
+  const totalQty = (inventory ?? []).reduce((acc, r: any) => acc + (r.quantity ?? 0), 0);
 
-  // We'll compute low stock once min_quantity is stored. For now show 0.
-  const lowStock = 0;
+  const lowStock = (inventory ?? []).filter((r: any) => (r.quantity ?? 0) > 0 && (r.quantity ?? 0) < (r.min_quantity ?? 0)).length;
+  const zeroStock = (inventory ?? []).filter((r: any) => (r.quantity ?? 0) <= 0).length;
+
+  const withMargin = (products ?? []).filter((p: any) => p.price != null && p.cost_price != null);
+  const avgMargin =
+    withMargin.length === 0
+      ? null
+      : withMargin.reduce((acc: number, p: any) => acc + (Number(p.price) - Number(p.cost_price)), 0) / withMargin.length;
+
+  const lockedCount = (products ?? []).filter((p: any) => p.price_locked || p.cost_locked).length;
 
   const { data: prodNames } = await supabase.from('products').select('id,name');
   const nameById = new Map((prodNames ?? []).map((p) => [p.id, p.name]));
@@ -62,9 +70,9 @@ export default async function AdminHome() {
 
       <div className="grid gap-4 md:grid-cols-4">
         <StatCard title="Produtos" value={String(productCount)} hint={`${activeCount} ativos`} />
-        <StatCard title="Itens em estoque" value={String(totalQty)} />
-        <StatCard title="Baixo estoque" value={String(lowStock)} hint="(depende do estoque mínimo)" />
-        <StatCard title="Movimentações" value={String((moves ?? []).length)} hint="últimas registradas" />
+        <StatCard title="Itens em estoque" value={String(totalQty)} hint={`${zeroStock} zerados`} />
+        <StatCard title="Baixo estoque" value={String(lowStock)} />
+        <StatCard title="Margem média" value={avgMargin == null ? '—' : `R$ ${avgMargin.toFixed(2)}`} hint={`${lockedCount} manuais`} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -98,11 +106,13 @@ export default async function AdminHome() {
         </div>
 
         <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
-          <div className="text-sm font-semibold">Próximos passos</div>
+          <div className="text-sm font-semibold">Ações rápidas</div>
           <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-slate-300">
-            <li>Guardar <span className="font-semibold">Preço de Custo</span> e <span className="font-semibold">Estoque mínimo</span> vindos da planilha.</li>
-            <li>Dashboard com <span className="font-semibold">Baixo estoque</span> real.</li>
-            <li>Relatórios: margem, giro, top produtos.</li>
+            <li>
+              Ver lista de <Link className="font-semibold text-yellow-400 hover:text-yellow-300" href="/admin/estoque">baixo estoque</Link>.
+            </li>
+            <li>Editar preço/custo no produto trava automaticamente (manual vence a planilha).</li>
+            <li>Próximo: relatórios de giro e ranking de produtos.</li>
           </ul>
         </div>
       </div>
