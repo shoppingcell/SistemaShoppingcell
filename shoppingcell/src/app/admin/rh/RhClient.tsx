@@ -1,8 +1,13 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabaseBrowser as supabase } from '@/lib/supabaseBrowser';
 import { Panel } from '@/app/admin/_components/ui/Panel';
 import { Button } from '@/app/admin/_components/ui/Button';
+import { Input } from '@/app/admin/_components/ui/Input';
+import { Select } from '@/app/admin/_components/ui/Select';
+import { Modal } from '@/app/admin/_components/ui/Modal';
 
 type Employee = {
   id: string;
@@ -55,7 +60,22 @@ export function RhClient({
   payments: Payment[];
   attendance: Attendance[];
 }) {
+  const router = useRouter();
   const [tab, setTab] = useState<'dashboard' | 'employees' | 'payments'>('dashboard');
+
+  const [modal, setModal] = useState<null | 'employee' | 'payment' | 'note'>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [employeeForm, setEmployeeForm] = useState({
+    name: '',
+    role: '',
+    salary: '',
+    hiredAt: '',
+    status: 'active',
+  });
+  const [paymentForm, setPaymentForm] = useState({ employeeId: '', description: '', amount: '', paidAt: '' });
+  const [noteForm, setNoteForm] = useState({ day: isoDate(new Date()), note: '' });
 
   const activeEmployees = useMemo(() => employees.filter((e) => e.status === 'active').length, [employees]);
 
@@ -104,6 +124,119 @@ export function RhClient({
     };
   }, [attendanceByDay]);
 
+  async function createEmployee() {
+    if (!employeeForm.name.trim()) return;
+    setSaving(true);
+    setError(null);
+
+    const { error } = await supabase.from('hr_employees').insert({
+      name: employeeForm.name.trim(),
+      role: employeeForm.role.trim() || null,
+      salary: employeeForm.salary.trim() ? Number(employeeForm.salary) : null,
+      hired_at: employeeForm.hiredAt || null,
+      status: employeeForm.status,
+    });
+
+    if (error) {
+      setError(error.message);
+      setSaving(false);
+      return;
+    }
+
+    setModal(null);
+    setEmployeeForm({ name: '', role: '', salary: '', hiredAt: '', status: 'active' });
+    router.refresh();
+    setSaving(false);
+  }
+
+  async function createPayment() {
+    if (!paymentForm.amount.trim()) return;
+    setSaving(true);
+    setError(null);
+
+    const paid_at = paymentForm.paidAt
+      ? new Date(paymentForm.paidAt).toISOString()
+      : new Date().toISOString();
+
+    const { error: payError } = await supabase.from('hr_payments').insert({
+      employee_id: paymentForm.employeeId || null,
+      description: paymentForm.description.trim() || 'Pagamento RH',
+      amount: Number(paymentForm.amount),
+      paid_at,
+    });
+
+    if (payError) {
+      setError(payError.message);
+      setSaving(false);
+      return;
+    }
+
+    // Also register in Finance as expense
+    await supabase.from('finance_transactions').insert({
+      type: 'expense',
+      category: 'RH',
+      description: paymentForm.description.trim() || 'Pagamento RH',
+      amount: Number(paymentForm.amount),
+      occurred_at: paid_at,
+    });
+
+    setModal(null);
+    setPaymentForm({ employeeId: '', description: '', amount: '', paidAt: '' });
+    router.refresh();
+    setSaving(false);
+  }
+
+  async function setAttendanceStatus(status: 'present' | 'absent') {
+    setSaving(true);
+    setError(null);
+
+    const day = isoDate(new Date());
+
+    const { error } = await supabase.from('hr_attendance').upsert(
+      {
+        day,
+        status,
+        note: null,
+      },
+      { onConflict: 'day' },
+    );
+
+    if (error) {
+      setError(error.message);
+      setSaving(false);
+      return;
+    }
+
+    router.refresh();
+    setSaving(false);
+  }
+
+  async function setAttendanceNote() {
+    if (!noteForm.day.trim()) return;
+    setSaving(true);
+    setError(null);
+
+    const { error } = await supabase.from('hr_attendance').upsert(
+      {
+        day: noteForm.day,
+        status: 'note',
+        note: noteForm.note.trim() || null,
+      },
+      { onConflict: 'day' },
+    );
+
+    if (error) {
+      setError(error.message);
+      setSaving(false);
+      return;
+    }
+
+    setModal(null);
+    setNoteForm({ day: isoDate(new Date()), note: '' });
+    router.refresh();
+    setSaving(false);
+  }
+
   return (
     <div className="grid gap-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -113,10 +246,139 @@ export function RhClient({
           <div className="mt-1 text-sm text-slate-400">Funcionários, pagamentos e custos de RH</div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="primary">+ Funcionário</Button>
-          <Button variant="ghost">+ Pagamento</Button>
+          <Button variant="primary" onClick={() => setModal('employee')}>
+            + Funcionário
+          </Button>
+          <Button variant="ghost" onClick={() => setModal('payment')}>
+            + Pagamento
+          </Button>
         </div>
       </div>
+
+      <Modal open={modal === 'employee'} title="Novo funcionário" onClose={() => setModal(null)}>
+        <form
+          className="grid gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void createEmployee();
+          }}
+        >
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nome</label>
+          <Input
+            value={employeeForm.name}
+            onChange={(e) => setEmployeeForm({ ...employeeForm, name: e.target.value })}
+          />
+
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Cargo</label>
+          <Input
+            value={employeeForm.role}
+            onChange={(e) => setEmployeeForm({ ...employeeForm, role: e.target.value })}
+          />
+
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Salário</label>
+          <Input
+            inputMode="decimal"
+            value={employeeForm.salary}
+            onChange={(e) => setEmployeeForm({ ...employeeForm, salary: e.target.value })}
+          />
+
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Admissão</label>
+          <Input
+            type="date"
+            value={employeeForm.hiredAt}
+            onChange={(e) => setEmployeeForm({ ...employeeForm, hiredAt: e.target.value })}
+          />
+
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</label>
+          <Select
+            value={employeeForm.status}
+            onChange={(e) => setEmployeeForm({ ...employeeForm, status: e.target.value })}
+          >
+            <option value="active">Ativo</option>
+            <option value="inactive">Inativo</option>
+          </Select>
+
+          {error && <div className="text-sm text-red-200">{error}</div>}
+          <Button disabled={saving} type="submit">
+            Salvar
+          </Button>
+        </form>
+      </Modal>
+
+      <Modal open={modal === 'payment'} title="Novo pagamento" onClose={() => setModal(null)}>
+        <form
+          className="grid gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void createPayment();
+          }}
+        >
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Funcionário (opcional)
+          </label>
+          <Select
+            value={paymentForm.employeeId}
+            onChange={(e) => setPaymentForm({ ...paymentForm, employeeId: e.target.value })}
+          >
+            <option value="">—</option>
+            {employees.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name}
+              </option>
+            ))}
+          </Select>
+
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Descrição</label>
+          <Input
+            value={paymentForm.description}
+            onChange={(e) => setPaymentForm({ ...paymentForm, description: e.target.value })}
+          />
+
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Valor</label>
+          <Input
+            inputMode="decimal"
+            value={paymentForm.amount}
+            onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
+          />
+
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Data/Hora</label>
+          <Input
+            type="datetime-local"
+            value={paymentForm.paidAt}
+            onChange={(e) => setPaymentForm({ ...paymentForm, paidAt: e.target.value })}
+          />
+
+          {error && <div className="text-sm text-red-200">{error}</div>}
+          <Button disabled={saving} type="submit">
+            Salvar
+          </Button>
+        </form>
+      </Modal>
+
+      <Modal open={modal === 'note'} title="Observação" onClose={() => setModal(null)}>
+        <form
+          className="grid gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void setAttendanceNote();
+          }}
+        >
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Dia</label>
+          <Input
+            type="date"
+            value={noteForm.day}
+            onChange={(e) => setNoteForm({ ...noteForm, day: e.target.value })}
+          />
+
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nota</label>
+          <Input value={noteForm.note} onChange={(e) => setNoteForm({ ...noteForm, note: e.target.value })} />
+
+          {error && <div className="text-sm text-red-200">{error}</div>}
+          <Button disabled={saving} type="submit">
+            Salvar
+          </Button>
+        </form>
+      </Modal>
 
       <div className="flex flex-wrap gap-2">
         <button
@@ -240,19 +502,31 @@ export function RhClient({
                     Ações rápidas
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <button className="rounded-full bg-green-500/15 px-4 py-2 text-xs font-semibold text-green-300 hover:bg-green-500/20">
+                    <button
+                      disabled={saving}
+                      onClick={() => void setAttendanceStatus('present')}
+                      className="rounded-full bg-green-500/15 px-4 py-2 text-xs font-semibold text-green-300 hover:bg-green-500/20 disabled:opacity-60"
+                    >
                       Marcar Presença (Hoje)
                     </button>
-                    <button className="rounded-full bg-red-500/15 px-4 py-2 text-xs font-semibold text-red-200 hover:bg-red-500/20">
+                    <button
+                      disabled={saving}
+                      onClick={() => void setAttendanceStatus('absent')}
+                      className="rounded-full bg-red-500/15 px-4 py-2 text-xs font-semibold text-red-200 hover:bg-red-500/20 disabled:opacity-60"
+                    >
                       Marcar Falta (Hoje)
                     </button>
-                    <button className="rounded-full bg-amber-500/15 px-4 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-500/20">
+                    <button
+                      disabled={saving}
+                      onClick={() => setModal('note')}
+                      className="rounded-full bg-amber-500/15 px-4 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-500/20 disabled:opacity-60"
+                    >
                       Adicionar Observação
                     </button>
                   </div>
+                  {error && <div className="mt-2 text-sm text-red-200">{error}</div>}
                   <div className="text-xs text-slate-500">
-                    Vou ligar essas ações no banco quando rodarmos o SQL completo (tabela{' '}
-                    <span className="font-mono">hr_attendance</span>).
+                    Agora já grava na tabela <span className="font-mono">hr_attendance</span>.
                   </div>
                 </div>
               </div>
