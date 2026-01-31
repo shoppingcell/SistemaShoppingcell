@@ -41,16 +41,16 @@ export default function AdminShellClient({
   }, [pathname]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-slate-100 text-slate-950">
       {/* Mobile topbar */}
-      <div className="sticky top-0 z-40 flex items-center justify-between border-b border-slate-800 bg-slate-950/90 px-4 py-3 backdrop-blur md:hidden">
+      <div className="sticky top-0 z-40 flex items-center justify-between border-b border-slate-200 bg-white/80 px-4 py-3 backdrop-blur md:hidden">
         <button
           onClick={() => setOpen((v) => !v)}
-          className="rounded-md border border-slate-800 bg-slate-900/40 px-3 py-2 text-sm text-slate-200"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm"
         >
           Menu
         </button>
-        <div className="text-sm font-semibold">Admin</div>
+        <div className="text-sm font-extrabold tracking-tight">ShoppingCell Admin</div>
         <div className="w-[52px]" />
       </div>
 
@@ -58,37 +58,46 @@ export default function AdminShellClient({
         {/* Sidebar */}
         <aside
           className={
-            'fixed inset-y-0 left-0 z-50 w-64 border-r border-slate-800 bg-slate-950 md:static md:block ' +
+            'fixed inset-y-0 left-0 z-50 w-72 border-r border-slate-900/40 bg-slate-950 text-white md:static md:block ' +
             (open ? 'block' : 'hidden')
           }
         >
           <div className="flex h-full flex-col">
-            <div className="flex items-center justify-between px-4 py-4">
-              <Link href="/admin" className="text-lg font-extrabold tracking-tight">
-                ShoppingCell
-              </Link>
-              <button
-                onClick={() => setOpen(false)}
-                className="rounded-md border border-slate-800 bg-slate-900/40 px-2 py-1 text-xs text-slate-300 md:hidden"
-              >
-                Fechar
-              </button>
+            <div className="px-5 py-5">
+              <div className="flex items-center justify-between">
+                <Link href="/admin" className="text-lg font-extrabold tracking-tight">
+                  <span className="text-white">SHOPPING</span>
+                  <span className="text-yellow-400">CELL</span>
+                </Link>
+                <button
+                  onClick={() => setOpen(false)}
+                  className="rounded-lg border border-slate-800 bg-slate-900/40 px-2 py-1 text-xs text-slate-200 md:hidden"
+                >
+                  Fechar
+                </button>
+              </div>
+              <div className="mt-2 text-xs text-slate-400">Painel administrativo</div>
             </div>
 
-            <nav className="px-2">
+            <nav className="px-3">
               {items.map((i) => (
                 <Link
                   key={i.href}
                   href={i.href}
                   onClick={() => setOpen(false)}
                   className={
-                    'mb-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm ' +
+                    'mb-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ' +
                     (i.active
-                      ? 'bg-slate-900 text-white'
-                      : 'text-slate-300 hover:bg-slate-900/60 hover:text-white')
+                      ? 'bg-yellow-400 text-slate-950 shadow-sm'
+                      : 'text-slate-200 hover:bg-slate-900/60 hover:text-white')
                   }
                 >
-                  <span className="grid h-7 w-7 place-items-center rounded-md border border-slate-800 bg-slate-900/40 text-xs">
+                  <span
+                    className={
+                      'grid h-8 w-8 place-items-center rounded-lg text-xs ' +
+                      (i.active ? 'bg-black/10 text-slate-950' : 'border border-slate-800 bg-slate-900/40')
+                    }
+                  >
                     {i.icon}
                   </span>
                   <span className="font-semibold">{i.label}</span>
@@ -96,7 +105,7 @@ export default function AdminShellClient({
               ))}
             </nav>
 
-            <div className="mt-auto border-t border-slate-800 px-4 py-4">
+            <div className="mt-auto border-t border-slate-800 px-5 py-4">
               <div className="truncate text-xs text-slate-400">{userEmail}</div>
               <div className="mt-3 flex items-center gap-2">
                 <Link href="/" className="text-xs text-slate-300 hover:text-white">
@@ -121,7 +130,9 @@ export default function AdminShellClient({
         )}
 
         {/* Content */}
-        <div className="w-full px-4 py-8 md:px-8">{children}</div>
+        <div className="w-full px-4 py-6 md:px-10">
+          <div className="mx-auto max-w-5xl">{children}</div>
+        </div>
       </div>
     </div>
   );
