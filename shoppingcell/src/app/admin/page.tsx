@@ -1,15 +1,38 @@
 import Link from 'next/link';
 import { createSupabaseServerClient } from '@/lib/supabaseServer';
+import { ArrowUpRight, Boxes, ClipboardList, DollarSign } from 'lucide-react';
 import DashboardCharts, { type DashboardDay } from './_components/DashboardCharts';
+import PremiumCard from './_components/PremiumCard';
+import StockGauge from './_components/StockGauge';
 
 export const dynamic = 'force-dynamic';
 
-function StatCard({ title, value, hint }: { title: string; value: string; hint?: string }) {
+function StatCard({
+  title,
+  value,
+  hint,
+  icon,
+}: {
+  title: string;
+  value: string;
+  hint?: string;
+  icon?: React.ReactNode;
+}) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-gradient-to-b from-slate-950 to-slate-950/40 p-5">
-      <div className="text-sm text-slate-400">{title}</div>
-      <div className="mt-2 text-3xl font-extrabold tracking-tight text-slate-100">{value}</div>
-      {hint && <div className="mt-2 text-xs text-slate-500">{hint}</div>}
+    <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-slate-950 to-slate-950/60 p-6 shadow-[0_10px_40px_rgba(0,0,0,0.35)]">
+      <div className="pointer-events-none absolute -top-24 left-10 h-48 w-48 rounded-full bg-yellow-400/10 blur-3xl" />
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{title}</div>
+          <div className="mt-2 text-3xl font-extrabold tracking-tight text-slate-100">{value}</div>
+          {hint && <div className="mt-2 text-xs text-slate-500">{hint}</div>}
+        </div>
+        {icon && (
+          <div className="grid h-10 w-10 place-items-center rounded-2xl border border-white/10 bg-white/5 text-yellow-300">
+            {icon}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -78,6 +101,16 @@ export default async function AdminHome() {
   const activeCount = (products ?? []).filter((p) => p.active).length;
   const totalQty = (inventory ?? []).reduce((acc, r: any) => acc + (r.quantity ?? 0), 0);
 
+  const stockRows = (inventory ?? []).filter((r: any) => Number(r.min_quantity ?? 0) > 0);
+  const stockHealth =
+    stockRows.length === 0
+      ? 100
+      : Math.round(
+          (stockRows.filter((r: any) => Number(r.quantity ?? 0) >= Number(r.min_quantity ?? 0)).length /
+            stockRows.length) *
+            100,
+        );
+
   const lowStock = (inventory ?? []).filter(
     (r: any) => (r.quantity ?? 0) > 0 && (r.quantity ?? 0) < (r.min_quantity ?? 0),
   ).length;
@@ -133,22 +166,23 @@ export default async function AdminHome() {
     <div className="grid gap-6">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div>
-          <h1 className="text-2xl font-extrabold">Dashboard</h1>
-          <p className="mt-1 text-sm text-slate-400">Visão geral do catálogo e estoque.</p>
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Overview</div>
+          <h1 className="mt-1 text-3xl font-extrabold tracking-tight">Dashboard</h1>
+          <p className="mt-1 text-sm text-slate-500">Visão geral (dia é o principal).</p>
         </div>
 
         <div className="flex gap-3">
           <Link
             href="/admin/produtos"
-            className="rounded-xl border border-slate-800 bg-slate-950 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900"
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-50"
           >
-            Ver produtos
+            Ver produtos <ArrowUpRight size={16} />
           </Link>
           <Link
             href="/admin/categorias"
-            className="rounded-xl border border-slate-800 bg-slate-950 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900"
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-50"
           >
-            Ver categorias
+            Ver categorias <ArrowUpRight size={16} />
           </Link>
         </div>
       </div>
@@ -158,75 +192,86 @@ export default async function AdminHome() {
           title="Caixa hoje"
           value={money(incomeToday - expenseToday)}
           hint={`Entradas: ${money(incomeToday)} • Saídas: ${money(expenseToday)}`}
+          icon={<DollarSign size={18} />}
         />
         <StatCard
           title="Vendas 7 dias"
           value={money(income7)}
           hint={`${(ordersConfirmed7 ?? []).length} pedidos confirmados`}
+          icon={<ArrowUpRight size={18} />}
         />
         <StatCard
           title="Pedidos hoje"
           value={String((ordersConfirmedToday ?? []).length)}
           hint="Confirmados"
+          icon={<ClipboardList size={18} />}
         />
         <StatCard
           title="Estoque"
           value={String(totalQty)}
           hint={`${zeroStock} zerados • ${lowStock} baixo`}
+          icon={<Boxes size={18} />}
         />
       </div>
 
-      <DashboardCharts data={days} />
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="md:col-span-2">
+          <DashboardCharts data={days} />
+        </div>
+        <PremiumCard title="Stock Health" right={<span className="text-yellow-300">{stockHealth}%</span>}>
+          <StockGauge value={stockHealth} />
+        </PremiumCard>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold">Atividades recentes</div>
+        <PremiumCard
+          title="Atividades recentes"
+          right={
             <Link href="/admin/produtos" className="text-xs text-slate-400 hover:text-white">
               Ver tudo
             </Link>
-          </div>
-          <div className="mt-4 grid gap-2">
+          }
+        >
+          <div className="mt-1 grid gap-2">
             {(moves ?? []).length === 0 ? (
               <div className="text-sm text-slate-500">Nenhuma movimentação ainda.</div>
             ) : (
               (moves ?? []).map((m) => (
                 <div
                   key={m.id}
-                  className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/30 p-3"
+                  className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-3"
                 >
                   <div className="min-w-0">
-                    <div className="truncate text-sm text-slate-200">
+                    <div className="truncate text-sm font-semibold text-slate-100">
                       {nameById.get(m.product_id) ?? m.product_id}
                     </div>
-                    <div className="truncate text-xs text-slate-500">{m.reason ?? '—'}</div>
+                    <div className="truncate text-xs text-slate-400">{m.reason ?? '—'}</div>
                   </div>
                   <div className="text-right">
                     <div
                       className={
                         m.delta > 0
-                          ? 'text-sm font-semibold text-green-400'
-                          : 'text-sm font-semibold text-red-300'
+                          ? 'text-sm font-extrabold text-green-300'
+                          : 'text-sm font-extrabold text-red-200'
                       }
                     >
                       {m.delta > 0 ? `+${m.delta}` : m.delta}
                     </div>
                     <div className="text-xs text-slate-500">
-                      {new Date(m.created_at).toLocaleString('pt-BR')}
+                      {new Date(m.created_at).toLocaleDateString('pt-BR')}
                     </div>
                   </div>
                 </div>
               ))
             )}
           </div>
-        </div>
+        </PremiumCard>
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
-          <div className="text-sm font-semibold">Ações rápidas</div>
-          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-slate-300">
+        <PremiumCard title="Ações rápidas">
+          <ul className="mt-1 list-disc space-y-2 pl-5 text-sm text-slate-300">
             <li>
               Ver lista de{' '}
-              <Link className="font-semibold text-yellow-400 hover:text-yellow-300" href="/admin/estoque">
+              <Link className="font-semibold text-yellow-300 hover:text-yellow-200" href="/admin/estoque">
                 baixo estoque
               </Link>
               .
@@ -234,7 +279,7 @@ export default async function AdminHome() {
             <li>Editar preço/custo no produto trava automaticamente (manual vence a planilha).</li>
             <li>Próximo: relatórios de giro e ranking de produtos.</li>
           </ul>
-        </div>
+        </PremiumCard>
       </div>
     </div>
   );
