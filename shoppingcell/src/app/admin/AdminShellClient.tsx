@@ -42,16 +42,16 @@ export default function AdminShellClient({
   }, [pathname]);
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-950">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
       {/* Mobile topbar */}
-      <div className="sticky top-0 z-40 flex items-center justify-between border-b border-slate-200 bg-white/80 px-4 py-3 backdrop-blur md:hidden">
+      <div className="sticky top-0 z-40 flex items-center justify-between border-b border-white/10 bg-slate-950/80 px-4 py-3 backdrop-blur md:hidden">
         <button
           onClick={() => setOpen((v) => !v)}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm"
+          className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-extrabold text-slate-100"
         >
           Menu
         </button>
-        <div className="text-sm font-extrabold tracking-tight">ShoppingCell Admin</div>
+        <div className="text-sm font-extrabold tracking-tight text-slate-100">ShoppingCell</div>
         <div className="w-[52px]" />
       </div>
 
