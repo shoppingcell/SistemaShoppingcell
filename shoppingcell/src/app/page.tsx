@@ -20,10 +20,10 @@ export default function HomePage() {
             </Link>
           </nav>
           <Link
-            href="#"
+            href="/admin"
             className="rounded-md bg-yellow-500 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-yellow-400"
           >
-            LOGIN / CADASTRAR
+            ÁREA DO LOJISTA
           </Link>
         </div>
       </header>
