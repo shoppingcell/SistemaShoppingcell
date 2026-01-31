@@ -72,7 +72,9 @@ export default function LoginClient() {
       {hasSession && (
         <div className="mt-4 rounded-lg border border-slate-800 bg-slate-900/40 p-3 text-sm text-slate-200">
           <div className="font-semibold">Você já tem uma sessão salva neste navegador.</div>
-          <div className="mt-1 text-slate-300">Se estiver em loop, limpe a sessão e faça login novamente.</div>
+          <div className="mt-1 text-slate-300">
+            Se estiver em loop, limpe a sessão e faça login novamente.
+          </div>
           <div className="mt-3 flex gap-2">
             <button
               type="button"
@@ -134,7 +136,9 @@ export default function LoginClient() {
 
         {status && <p className="text-sm text-slate-200">{status}</p>}
 
-        <p className="text-xs text-slate-500">Login por senha (recomendado). Use "Esqueci minha senha" para definir/recuperar.</p>
+        <p className="text-xs text-slate-500">
+          Login por senha (recomendado). Use &quot;Esqueci minha senha&quot; para definir/recuperar.
+        </p>
       </form>
     </div>
   );
