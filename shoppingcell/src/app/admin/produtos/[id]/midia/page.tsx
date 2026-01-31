@@ -13,6 +13,8 @@ type Media = {
   is_primary: boolean;
 };
 
+const MEDIA_BUCKET = process.env.NEXT_PUBLIC_SUPABASE_MEDIA_BUCKET || 'product-media';
+
 export default function MidiaProdutoPage() {
   const params = useParams<{ id: string }>();
   const productId = params.id;
@@ -25,6 +27,9 @@ export default function MidiaProdutoPage() {
 
   const [url, setUrl] = useState('');
   const [alt, setAlt] = useState('');
+
+  const [file, setFile] = useState<File | null>(null);
+  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
 
   const primaryId = useMemo(() => items.find((i) => i.is_primary)?.id ?? null, [items]);
 
@@ -48,7 +53,17 @@ export default function MidiaProdutoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productId]);
 
-  async function onAdd(e: React.FormEvent) {
+  useEffect(() => {
+    if (!file) {
+      setFilePreviewUrl(null);
+      return;
+    }
+    const u = URL.createObjectURL(file);
+    setFilePreviewUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
+
+  async function onAddUrl(e: React.FormEvent) {
     e.preventDefault();
     if (!url.trim()) return;
 
@@ -76,6 +91,53 @@ export default function MidiaProdutoPage() {
     setSaving(false);
   }
 
+  async function onUploadFile(e: React.FormEvent) {
+    e.preventDefault();
+    if (!file) return;
+
+    setSaving(true);
+    setError(null);
+
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const safeExt = ext.replace(/[^a-z0-9]/g, '') || 'jpg';
+    const path = `products/${productId}/${Date.now()}-${Math.random().toString(16).slice(2)}.${safeExt}`;
+
+    const { error: uploadError } = await supabase.storage.from(MEDIA_BUCKET).upload(path, file, {
+      upsert: false,
+      contentType: file.type || undefined,
+      cacheControl: '3600',
+    });
+
+    if (uploadError) {
+      setError(uploadError.message);
+      setSaving(false);
+      return;
+    }
+
+    const { data } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
+    const publicUrl = data.publicUrl;
+
+    const { error: insertError } = await supabase.from('product_media').insert({
+      product_id: productId,
+      url: publicUrl,
+      alt: alt.trim() || null,
+      sort: items.length,
+      is_primary: items.length === 0,
+    });
+
+    if (insertError) {
+      setError(insertError.message);
+      setSaving(false);
+      return;
+    }
+
+    setFile(null);
+    setAlt('');
+    await load();
+    router.refresh();
+    setSaving(false);
+  }
+
   async function setPrimary(id: string) {
     setSaving(true);
     setError(null);
@@ -83,7 +145,10 @@ export default function MidiaProdutoPage() {
     const updates = items.map((m) => ({ id: m.id, is_primary: m.id === id }));
 
     for (const u of updates) {
-      const { error } = await supabase.from('product_media').update({ is_primary: u.is_primary }).eq('id', u.id);
+      const { error } = await supabase
+        .from('product_media')
+        .update({ is_primary: u.is_primary })
+        .eq('id', u.id);
       if (error) {
         setError(error.message);
         setSaving(false);
@@ -116,30 +181,93 @@ export default function MidiaProdutoPage() {
   return (
     <div className="max-w-3xl">
       <h1 className="text-2xl font-extrabold">Mídia do produto</h1>
-      <p className="mt-1 text-sm text-slate-300">Adicione imagens por URL (por enquanto). Depois fazemos upload direto no bucket.</p>
+      <p className="mt-1 text-sm text-slate-300">
+        Agora você pode adicionar por URL ou enviar uma imagem do seu celular/PC (upload para o bucket{' '}
+        <span className="font-mono">{MEDIA_BUCKET}</span>).
+      </p>
 
-      <form onSubmit={onAdd} className="mt-6 grid gap-3 rounded-xl border border-slate-800 bg-slate-950 p-6">
-        <label className="text-sm text-slate-200">
-          URL da imagem
-          <input
-            className="mt-1 w-full rounded-md bg-slate-900 p-3 text-white"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://..."
-          />
-        </label>
-        <label className="text-sm text-slate-200">
-          Texto alternativo (alt)
-          <input className="mt-1 w-full rounded-md bg-slate-900 p-3 text-white" value={alt} onChange={(e) => setAlt(e.target.value)} />
-        </label>
-        <button
-          disabled={saving}
-          className="rounded-md bg-yellow-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-yellow-400 disabled:opacity-60"
+      <div className="mt-6 grid gap-4">
+        <form onSubmit={onAddUrl} className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950 p-6">
+          <div className="text-sm font-semibold text-slate-100">Adicionar por URL</div>
+          <label className="text-sm text-slate-200">
+            URL da imagem
+            <input
+              className="mt-1 w-full rounded-md bg-slate-900 p-3 text-white"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://..."
+            />
+          </label>
+          <label className="text-sm text-slate-200">
+            Texto alternativo (alt)
+            <input
+              className="mt-1 w-full rounded-md bg-slate-900 p-3 text-white"
+              value={alt}
+              onChange={(e) => setAlt(e.target.value)}
+            />
+          </label>
+          <button
+            disabled={saving}
+            className="rounded-md bg-yellow-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-yellow-400 disabled:opacity-60"
+          >
+            Adicionar URL
+          </button>
+        </form>
+
+        <form
+          onSubmit={onUploadFile}
+          className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950 p-6"
         >
-          Adicionar
-        </button>
+          <div className="text-sm font-semibold text-slate-100">Enviar imagem (celular/PC)</div>
+
+          <label className="text-sm text-slate-200">
+            Arquivo
+            <input
+              className="mt-1 w-full rounded-md bg-slate-900 p-3 text-white file:mr-4 file:rounded-md file:border-0 file:bg-slate-800 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-slate-200 hover:file:bg-slate-700"
+              type="file"
+              accept="image/*"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              disabled={saving}
+            />
+          </label>
+
+          {filePreviewUrl && (
+            <div className="rounded-lg border border-slate-800 bg-slate-900/30 p-3">
+              <div className="text-xs text-slate-400">Prévia</div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={filePreviewUrl}
+                alt={alt || 'Prévia'}
+                className="mt-2 h-44 w-auto max-w-full rounded-md object-contain"
+              />
+              <div className="mt-2 text-xs text-slate-400">{file?.name}</div>
+            </div>
+          )}
+
+          <label className="text-sm text-slate-200">
+            Texto alternativo (alt)
+            <input
+              className="mt-1 w-full rounded-md bg-slate-900 p-3 text-white"
+              value={alt}
+              onChange={(e) => setAlt(e.target.value)}
+            />
+          </label>
+
+          <button
+            disabled={saving || !file}
+            className="rounded-md bg-yellow-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-yellow-400 disabled:opacity-60"
+          >
+            Enviar imagem
+          </button>
+
+          <div className="text-xs text-slate-400">
+            Observação: o bucket precisa existir no Supabase e estar com política de upload liberada para o
+            usuário logado.
+          </div>
+        </form>
+
         {error && <div className="text-sm text-red-200">{error}</div>}
-      </form>
+      </div>
 
       <div className="mt-6 rounded-xl border border-slate-800 bg-slate-950 p-4">
         <div className="text-sm font-semibold">Itens ({items.length})</div>
@@ -151,7 +279,10 @@ export default function MidiaProdutoPage() {
         ) : (
           <div className="mt-4 grid gap-3">
             {items.map((m) => (
-              <div key={m.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/30 p-3">
+              <div
+                key={m.id}
+                className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/30 p-3"
+              >
                 <div className="min-w-0">
                   <div className="truncate text-sm text-slate-200">{m.url}</div>
                   <div className="text-xs text-slate-400">{m.alt ?? '—'}</div>
@@ -161,7 +292,9 @@ export default function MidiaProdutoPage() {
                     disabled={saving}
                     onClick={() => setPrimary(m.id)}
                     className={`rounded-md px-3 py-2 text-xs font-semibold ${
-                      m.id === primaryId ? 'bg-green-600 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
+                      m.id === primaryId
+                        ? 'bg-green-600 text-white'
+                        : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
                     }`}
                   >
                     {m.id === primaryId ? 'Principal' : 'Definir principal'}
