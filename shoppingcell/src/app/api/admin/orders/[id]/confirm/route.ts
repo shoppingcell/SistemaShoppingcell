@@ -92,6 +92,21 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
   const { error: stErr } = await service.from('orders').update({ status: 'confirmed' }).eq('id', id);
   if (stErr) return NextResponse.json({ ok: false, error: stErr.message }, { status: 500 });
 
+  // Finance: record revenue (best-effort, but should usually succeed)
+  try {
+    const total = (items ?? []).reduce((acc: number, it: any) => acc + Number(it.price ?? 0) * Number(it.quantity ?? 0), 0);
+    await service.from('finance_transactions').insert({
+      type: 'income',
+      category: 'Vendas',
+      description: `Pedido ${String(id).slice(0, 8)}`,
+      amount: total,
+      occurred_at: now,
+      order_id: id,
+    } as any);
+  } catch {
+    // ignore
+  }
+
   // Write-back to Google Sheets (best-effort)
   try {
     const payload = (items ?? [])
