@@ -109,6 +109,19 @@ export default function PedidoDetailPage() {
     router.refresh();
   }
 
+  async function confirmOrder() {
+    setError(null);
+    const res = await fetch(`/api/admin/orders/${id}/confirm`, { method: 'POST' });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json?.ok) {
+      setError(json?.error || 'Falha ao confirmar.');
+      return;
+    }
+    router.refresh();
+    // reload view state
+    window.location.reload();
+  }
+
   if (loading) return <div className="text-slate-300">Carregando…</div>;
   if (error) return <div className="text-red-200">Erro: {error}</div>;
 
@@ -119,12 +132,20 @@ export default function PedidoDetailPage() {
           <h1 className="text-2xl font-extrabold">Pedido</h1>
           <p className="mt-1 text-sm text-slate-400">Status: {order?.status}</p>
         </div>
-        <button
-          onClick={sendWhatsApp}
-          className="rounded-xl bg-green-600 px-5 py-3 text-sm font-semibold text-white hover:bg-green-500"
-        >
-          Enviar no WhatsApp
-        </button>
+        <div className="flex flex-col gap-2 md:flex-row">
+          <button
+            onClick={sendWhatsApp}
+            className="rounded-xl bg-green-600 px-5 py-3 text-sm font-semibold text-white hover:bg-green-500"
+          >
+            Enviar no WhatsApp
+          </button>
+          <button
+            onClick={confirmOrder}
+            className="rounded-xl bg-yellow-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-yellow-400"
+          >
+            Confirmar (baixar estoque)
+          </button>
+        </div>
       </div>
 
       <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
