@@ -17,6 +17,7 @@ const nav: NavItem[] = [
   { href: '/admin/estoque', label: 'Estoque', icon: '≋' },
   { href: '/admin/pedidos', label: 'Pedidos', icon: '☰' },
   { href: '/admin/financeiro', label: 'Financeiro', icon: '$' },
+  { href: '/admin/rh', label: 'RH', icon: '⌂' },
   { href: '/admin/integracoes/google', label: 'Google Sheets', icon: '⧉' },
 ];
 
