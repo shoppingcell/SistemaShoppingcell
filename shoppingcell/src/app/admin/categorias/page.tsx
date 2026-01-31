@@ -1,72 +1,73 @@
 import Link from 'next/link';
 import { createSupabaseServerClient } from '@/lib/supabaseServer';
+import { PageHeader } from '@/app/admin/_components/ui/PageHeader';
+import { CategoriasClient } from '@/app/admin/categorias/CategoriasClient';
 
 export const dynamic = 'force-dynamic';
 
+type CategoryRow = {
+  id: string;
+  name: string;
+  slug: string;
+  sort: number;
+};
+
+type ProductRow = {
+  category_id: string | null;
+};
+
 export default async function CategoriasPage() {
   const supabase = await createSupabaseServerClient();
-  const { data: rows, error } = await supabase
-    .from('categories')
-    .select('id,name,slug,sort,created_at')
-    .order('name', { ascending: true });
+
+  const [{ data: rows, error }, { data: products, error: prodErr }] = await Promise.all([
+    supabase
+      .from('categories')
+      .select('id,name,slug,sort')
+      .order('sort', { ascending: true })
+      .order('name', { ascending: true }),
+    supabase.from('products').select('category_id'),
+  ]);
+
+  const counts = new Map<string, number>();
+  for (const p of (products as ProductRow[] | null | undefined) ?? []) {
+    if (!p.category_id) continue;
+    counts.set(p.category_id, (counts.get(p.category_id) || 0) + 1);
+  }
 
   return (
-    <div>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-extrabold">Categorias</h1>
-          <p className="mt-1 text-sm text-slate-400">Gerencie as categorias do catálogo.</p>
-        </div>
-        <Link
-          href="/admin/categorias/nova"
-          className="rounded-md bg-yellow-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-yellow-400"
-        >
-          Nova categoria
-        </Link>
-      </div>
+    <div className="grid gap-6">
+      <PageHeader
+        kicker="Categorias"
+        title="Categorias"
+        subtitle="Gerencie as categorias do catálogo."
+        actions={
+          <Link
+            href="/admin/categorias/nova"
+            className="inline-flex items-center gap-2 rounded-2xl bg-yellow-400 px-5 py-3 text-sm font-extrabold text-slate-950 hover:bg-yellow-300"
+          >
+            + Nova categoria
+          </Link>
+        }
+      />
 
-      {error ? (
-        <div className="mt-6 rounded-xl border border-red-900/50 bg-red-950/30 p-4 text-sm text-red-200">
+      {error || prodErr ? (
+        <div className="rounded-3xl border border-red-500/20 bg-red-500/10 p-5 text-sm text-red-200">
           <div className="font-semibold">Erro ao carregar categorias</div>
-          <div className="mt-1 opacity-90">{error.message}</div>
+          <div className="mt-2 opacity-90">{error?.message ?? prodErr?.message}</div>
           <div className="mt-3 text-xs text-red-200/80">
-            Se ainda não aplicou o schema, rode o arquivo <code>supabase/admin_schema.sql</code> no SQL Editor do Supabase.
+            Se ainda não aplicou o schema, rode: <code>supabase/admin_schema.sql</code>
           </div>
         </div>
       ) : (
-        <div className="mt-6 overflow-hidden rounded-xl border border-slate-800">
-          <table className="w-full bg-slate-950 text-sm">
-            <thead className="bg-slate-900/40 text-left text-slate-300">
-              <tr>
-                <th className="p-3">Nome</th>
-                <th className="p-3">Slug</th>
-                <th className="p-3">Ordem</th>
-                <th className="p-3">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(rows ?? []).map((c) => (
-                <tr key={c.id} className="border-t border-slate-800">
-                  <td className="p-3 font-medium">{c.name}</td>
-                  <td className="p-3 text-slate-300">{c.slug}</td>
-                  <td className="p-3 text-slate-300">{c.sort}</td>
-                  <td className="p-3">
-                    <Link href={`/admin/categorias/${c.id}`} className="text-yellow-400 hover:text-yellow-300">
-                      Editar
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-              {(rows ?? []).length === 0 && (
-                <tr>
-                  <td className="p-3 text-slate-400" colSpan={4}>
-                    Nenhuma categoria cadastrada ainda.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <CategoriasClient
+          rows={((rows as CategoryRow[] | null | undefined) ?? []).map((c) => ({
+            id: c.id,
+            name: c.name,
+            slug: c.slug,
+            sort: c.sort,
+            productsCount: counts.get(c.id) || 0,
+          }))}
+        />
       )}
     </div>
   );
