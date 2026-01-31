@@ -26,10 +26,13 @@ export default function PedidoDetailPage() {
     const [{ data: o, error: oErr }, { data: its, error: iErr }, { data: prods }] = await Promise.all([
       supabase.from('orders').select('*').eq('id', id).single(),
       supabase.from('order_items').select('*').eq('order_id', id),
-      supabase.from('products').select('id,name,sheet_code').in(
-        'id',
-        (items ?? []).map((x) => x.product_id),
-      ),
+      supabase
+        .from('products')
+        .select('id,name,sheet_code')
+        .in(
+          'id',
+          (items ?? []).map((x) => x.product_id),
+        ),
     ]);
 
     if (oErr) setError(oErr.message);
@@ -37,7 +40,7 @@ export default function PedidoDetailPage() {
 
     const nameById = new Map((prods ?? []).map((p: any) => [p.id, p]));
     setOrder(o);
-    setItems((its ?? []).map((it: any) => ({ ...it, product: nameById.get(it.product_id) })))
+    setItems((its ?? []).map((it: any) => ({ ...it, product: nameById.get(it.product_id) })));
     setLoading(false);
   }
 
@@ -46,7 +49,11 @@ export default function PedidoDetailPage() {
     (async () => {
       setLoading(true);
       setError(null);
-      const { data: o, error: oErr } = await supabase.from('orders').select('*').eq('id', id).single();
+      const { data: o, error: oErr } = await supabase
+        .from('orders')
+        .select('*, customers(name,phone)')
+        .eq('id', id)
+        .single();
       if (oErr) {
         setError(oErr.message);
         setLoading(false);
@@ -65,10 +72,13 @@ export default function PedidoDetailPage() {
       setItems((its ?? []).map((it: any) => ({ ...it, product: byId.get(it.product_id) })));
       setLoading(false);
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [id]);
 
-  const total = useMemo(() => items.reduce((acc, it) => acc + Number(it.price ?? 0) * Number(it.quantity ?? 0), 0), [items]);
+  const total = useMemo(
+    () => items.reduce((acc, it) => acc + Number(it.price ?? 0) * Number(it.quantity ?? 0), 0),
+    [items],
+  );
 
   function buildWhatsAppText() {
     const lines: string[] = [];
@@ -150,18 +160,29 @@ export default function PedidoDetailPage() {
 
       <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
         <div className="text-sm text-slate-400">Cliente</div>
-        <div className="mt-1 text-lg font-semibold text-slate-200">{order?.customer_name ?? '—'}</div>
-        <div className="text-sm text-slate-400">{order?.customer_phone ?? '—'}</div>
+        <div className="mt-1 text-lg font-semibold text-slate-200">
+          {order?.customers?.name ?? order?.customer_name ?? '—'}
+        </div>
+        <div className="text-sm text-slate-400">
+          {order?.customers?.phone ?? order?.customer_phone ?? '—'}
+        </div>
       </div>
 
       <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
         <div className="text-sm font-semibold">Itens</div>
         <div className="mt-4 grid gap-2">
           {items.map((it) => (
-            <div key={it.id} className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/30 p-3">
+            <div
+              key={it.id}
+              className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/30 p-3"
+            >
               <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-slate-200">{it.product?.name ?? it.product_id}</div>
-                <div className="text-xs text-slate-500">{it.product?.sheet_code ? `Código: ${it.product.sheet_code}` : '—'}</div>
+                <div className="truncate text-sm font-semibold text-slate-200">
+                  {it.product?.name ?? it.product_id}
+                </div>
+                <div className="text-xs text-slate-500">
+                  {it.product?.sheet_code ? `Código: ${it.product.sheet_code}` : '—'}
+                </div>
               </div>
               <div className="text-right">
                 <div className="text-sm text-slate-200">{it.quantity}x</div>

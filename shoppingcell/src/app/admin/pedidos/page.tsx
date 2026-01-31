@@ -8,7 +8,7 @@ export default async function PedidosPage() {
 
   const { data: orders, error } = await supabase
     .from('orders')
-    .select('id,status,customer_name,customer_phone,created_at')
+    .select('id,status,customer_name,customer_phone,customer_id,created_at,customers(name,phone)')
     .order('created_at', { ascending: false })
     .limit(50);
 
@@ -51,8 +51,12 @@ export default async function PedidosPage() {
               {(orders ?? []).map((o) => (
                 <tr key={o.id} className="border-t border-slate-800">
                   <td className="p-3 text-slate-200">{o.status}</td>
-                  <td className="p-3 text-slate-200">{o.customer_name ?? '—'}</td>
-                  <td className="p-3 text-slate-400">{o.customer_phone ?? '—'}</td>
+                  <td className="p-3 text-slate-200">
+                    {(o as any).customers?.name ?? o.customer_name ?? '—'}
+                  </td>
+                  <td className="p-3 text-slate-400">
+                    {(o as any).customers?.phone ?? o.customer_phone ?? '—'}
+                  </td>
                   <td className="p-3 text-slate-400">{new Date(o.created_at).toLocaleString('pt-BR')}</td>
                   <td className="p-3">
                     <Link href={`/admin/pedidos/${o.id}`} className="text-yellow-400 hover:text-yellow-300">

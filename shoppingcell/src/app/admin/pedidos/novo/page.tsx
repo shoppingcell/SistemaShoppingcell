@@ -12,6 +12,12 @@ type Product = {
   cost_price?: number | null;
 };
 
+type Customer = {
+  id: string;
+  name: string;
+  phone?: string | null;
+};
+
 type Item = { product: Product; quantity: number };
 
 function onlyDigits(s: string) {
@@ -28,6 +34,9 @@ export default function NovoPedidoPage() {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [q, setQ] = useState('');
+
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customerId, setCustomerId] = useState<string>('');
 
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -46,6 +55,20 @@ export default function NovoPedidoPage() {
         if (error) setError(error.message);
         setProducts((data as any) ?? []);
       });
+
+    supabase
+      .from('customers')
+      .select('id,name,phone')
+      .eq('active', true)
+      .order('name', { ascending: true })
+      .limit(200)
+      .then(({ data, error }) => {
+        if (error) {
+          // If table isn't created yet, we don't block order creation.
+          return;
+        }
+        setCustomers((data as any) ?? []);
+      });
   }, []);
 
   const filtered = useMemo(() => {
@@ -58,7 +81,7 @@ export default function NovoPedidoPage() {
 
   const totals = useMemo(() => {
     const totalItems = items.reduce((acc, i) => acc + i.quantity, 0);
-    const totalValue = items.reduce((acc, i) => acc + (Number(i.product.price ?? 0) * i.quantity), 0);
+    const totalValue = items.reduce((acc, i) => acc + Number(i.product.price ?? 0) * i.quantity, 0);
     return { totalItems, totalValue };
   }, [items]);
 
@@ -86,7 +109,13 @@ export default function NovoPedidoPage() {
 
     const { data: order, error: orderErr } = await supabase
       .from('orders')
-      .insert({ status: 'draft', customer_name: customerName || null, customer_phone: phone || null, notes: notes || null })
+      .insert({
+        status: 'draft',
+        customer_id: customerId || null,
+        customer_name: customerName || null,
+        customer_phone: phone || null,
+        notes: notes || null,
+      } as any)
       .select('id')
       .single();
 
@@ -142,7 +171,9 @@ export default function NovoPedidoPage() {
               >
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold text-slate-200">{p.name}</div>
-                  <div className="text-xs text-slate-500">{p.sheet_code ? `Código: ${p.sheet_code}` : '—'}</div>
+                  <div className="text-xs text-slate-500">
+                    {p.sheet_code ? `Código: ${p.sheet_code}` : '—'}
+                  </div>
                 </div>
                 <div className="text-xs text-slate-300">{money(p.price ?? null)}</div>
               </button>
@@ -154,8 +185,39 @@ export default function NovoPedidoPage() {
           <div className="text-sm font-semibold">Cliente</div>
           <div className="mt-3 grid gap-3">
             <label className="text-sm text-slate-200">
+              Cliente cadastrado
+              <select
+                className="mt-1 w-full rounded-md bg-slate-900 p-3 text-white"
+                value={customerId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setCustomerId(id);
+                  const c = customers.find((x) => x.id === id);
+                  if (c) {
+                    setCustomerName(c.name);
+                    setCustomerPhone(c.phone || '');
+                  }
+                }}
+              >
+                <option value="">— Selecionar —</option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <div className="mt-1 text-xs text-slate-500">
+                Se não escolher, você pode preencher manualmente.
+              </div>
+            </label>
+
+            <label className="text-sm text-slate-200">
               Nome
-              <input className="mt-1 w-full rounded-md bg-slate-900 p-3 text-white" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+              <input
+                className="mt-1 w-full rounded-md bg-slate-900 p-3 text-white"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+              />
             </label>
             <label className="text-sm text-slate-200">
               WhatsApp
@@ -169,7 +231,11 @@ export default function NovoPedidoPage() {
             </label>
             <label className="text-sm text-slate-200">
               Observações
-              <textarea className="mt-1 min-h-[80px] w-full rounded-md bg-slate-900 p-3 text-white" value={notes} onChange={(e) => setNotes(e.target.value)} />
+              <textarea
+                className="mt-1 min-h-[80px] w-full rounded-md bg-slate-900 p-3 text-white"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
             </label>
           </div>
         </div>
@@ -190,16 +256,29 @@ export default function NovoPedidoPage() {
         ) : (
           <div className="mt-4 grid gap-2">
             {items.map((it) => (
-              <div key={it.product.id} className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/30 p-3">
+              <div
+                key={it.product.id}
+                className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/30 p-3"
+              >
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold text-slate-200">{it.product.name}</div>
-                  <div className="text-xs text-slate-500">{it.product.sheet_code ? `Código: ${it.product.sheet_code}` : '—'}</div>
+                  <div className="text-xs text-slate-500">
+                    {it.product.sheet_code ? `Código: ${it.product.sheet_code}` : '—'}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200"
-                    onClick={() => setItems((curr) => curr.map((x) => (x.product.id === it.product.id ? { ...x, quantity: Math.max(1, x.quantity - 1) } : x)))}
+                    onClick={() =>
+                      setItems((curr) =>
+                        curr.map((x) =>
+                          x.product.id === it.product.id
+                            ? { ...x, quantity: Math.max(1, x.quantity - 1) }
+                            : x,
+                        ),
+                      )
+                    }
                   >
                     -
                   </button>
@@ -207,7 +286,13 @@ export default function NovoPedidoPage() {
                   <button
                     type="button"
                     className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200"
-                    onClick={() => setItems((curr) => curr.map((x) => (x.product.id === it.product.id ? { ...x, quantity: x.quantity + 1 } : x)))}
+                    onClick={() =>
+                      setItems((curr) =>
+                        curr.map((x) =>
+                          x.product.id === it.product.id ? { ...x, quantity: x.quantity + 1 } : x,
+                        ),
+                      )
+                    }
                   >
                     +
                   </button>
