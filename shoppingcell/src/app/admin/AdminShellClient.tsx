@@ -15,6 +15,7 @@ const nav: NavItem[] = [
   { href: '/admin/produtos', label: 'Produtos', icon: '▣' },
   { href: '/admin/categorias', label: 'Categorias', icon: '⌁' },
   { href: '/admin/estoque', label: 'Estoque', icon: '≋' },
+  { href: '/admin/pedidos', label: 'Pedidos', icon: '☰' },
 ];
 
 function isActive(pathname: string, href: string) {
