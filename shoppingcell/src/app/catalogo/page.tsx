@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
-import { formatBRLFromCents } from '@/lib/formatPrice';
+import CatalogoClient from '@/app/catalogo/CatalogoClient';
 
 export const revalidate = 60;
 
@@ -10,15 +10,21 @@ type Product = {
   slug: string;
   description: string | null;
   base_price_cents: number;
+  featured?: boolean | null;
+};
+
+type MediaRow = {
+  product_id: string;
+  url: string;
 };
 
 export default async function CatalogoPage() {
   const { data, error } = await supabase
     .from('products')
-    .select('id,name,slug,description,base_price_cents')
+    .select('id,name,slug,description,base_price_cents,featured')
     .eq('active', true)
     .order('created_at', { ascending: false })
-    .limit(60);
+    .limit(120);
 
   if (error) {
     return (
@@ -38,6 +44,16 @@ export default async function CatalogoPage() {
 
   const products = (data ?? []) as Product[];
 
+  const { data: media } = await supabase
+    .from('product_media')
+    .select('product_id,url')
+    .eq('is_primary', true);
+  const mediaByProductId = new Map(
+    (media as MediaRow[] | null | undefined)?.map((m) => [m.product_id, m.url]) ?? [],
+  );
+
+  const whatsappE164 = process.env.NEXT_PUBLIC_WHATSAPP_E164 || '+559492814167';
+
   return (
     <main className="min-h-screen bg-slate-900 px-4 py-12 text-white">
       <div className="mx-auto max-w-6xl">
@@ -51,23 +67,18 @@ export default async function CatalogoPage() {
           </Link>
         </div>
 
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {products.map((p) => (
-            <Link
-              key={p.id}
-              href={`/produto/${p.slug}`}
-              className="rounded-xl border border-slate-800 bg-slate-950 p-5 hover:border-slate-600"
-            >
-              <div className="text-lg font-semibold">{p.name}</div>
-              <div className="mt-2 text-sm text-slate-300 line-clamp-2">
-                {p.description ?? '—'}
-              </div>
-              <div className="mt-4 text-base font-bold text-yellow-400">
-                {formatBRLFromCents(p.base_price_cents)}
-              </div>
-            </Link>
-          ))}
-        </div>
+        <CatalogoClient
+          whatsappE164={whatsappE164}
+          products={products.map((p) => ({
+            id: p.id,
+            name: p.name,
+            slug: p.slug,
+            description: p.description,
+            base_price_cents: p.base_price_cents,
+            featured: Boolean(p.featured),
+            imageUrl: mediaByProductId.get(p.id) ?? null,
+          }))}
+        />
 
         {products.length === 0 && (
           <p className="mt-10 text-sm text-slate-300">

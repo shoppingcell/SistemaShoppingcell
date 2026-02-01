@@ -17,6 +17,7 @@ export default function NovoProdutoPage() {
   const [categoryId, setCategoryId] = useState<string>('');
   const [price, setPrice] = useState<string>('');
   const [active, setActive] = useState(true);
+  const [featured, setFeatured] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +48,7 @@ export default function NovoProdutoPage() {
         price: parsedPrice,
         price_locked: true,
         active,
+        featured,
       } as any)
       .select('id')
       .single();
@@ -66,7 +68,10 @@ export default function NovoProdutoPage() {
       <h1 className="text-2xl font-extrabold">Novo produto</h1>
       <p className="mt-1 text-sm text-slate-300">Cadastre um produto simples (sem variações por enquanto).</p>
 
-      <form onSubmit={onSubmit} className="mt-6 grid gap-4 rounded-xl border border-slate-800 bg-slate-950 p-6">
+      <form
+        onSubmit={onSubmit}
+        className="mt-6 grid gap-4 rounded-xl border border-slate-800 bg-slate-950 p-6"
+      >
         <label className="text-sm text-slate-200">
           Nome
           <input
@@ -125,10 +130,17 @@ export default function NovoProdutoPage() {
           />
         </label>
 
-        <label className="flex items-center gap-2 text-sm text-slate-200">
-          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
-          Ativo
-        </label>
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="flex items-center gap-2 text-sm text-slate-200">
+            <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+            Ativo
+          </label>
+
+          <label className="flex items-center gap-2 text-sm text-slate-200">
+            <input type="checkbox" checked={featured} onChange={(e) => setFeatured(e.target.checked)} />
+            Destaque (Catálogo)
+          </label>
+        </div>
 
         <button
           disabled={loading}

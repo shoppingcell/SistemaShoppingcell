@@ -17,6 +17,7 @@ type Product = {
   cost_price?: number | null;
   active: boolean;
   category_id: string | null;
+  featured?: boolean;
 };
 
 export default function EditarProdutoPage() {
@@ -35,14 +36,20 @@ export default function EditarProdutoPage() {
   useEffect(() => {
     Promise.all([
       supabase.from('categories').select('id,name').order('sort', { ascending: true }),
-      supabase.from('products').select('id,name,slug,description,price,cost_price,active,category_id').eq('id', id).single(),
+      supabase
+        .from('products')
+        .select('id,name,slug,description,price,cost_price,active,category_id,featured')
+        .eq('id', id)
+        .single(),
     ]).then(([catsRes, prodRes]) => {
       setCategories((catsRes.data as any) ?? []);
       if (prodRes.error) setError(prodRes.error.message);
-      const data = (prodRes.data as any) as Product | null;
+      const data = prodRes.data as any as Product | null;
       setP(data);
       setPriceText(data?.price != null ? String(Number(data.price).toFixed(2)) : '');
-      setCostText((data as any)?.cost_price != null ? String(Number((data as any).cost_price).toFixed(2)) : '');
+      setCostText(
+        (data as any)?.cost_price != null ? String(Number((data as any).cost_price).toFixed(2)) : '',
+      );
       setLoading(false);
     });
   }, [id]);
@@ -70,6 +77,7 @@ export default function EditarProdutoPage() {
         cost_locked: true,
         active: p.active,
         category_id: p.category_id,
+        featured: Boolean((p as any).featured),
       } as any)
       .eq('id', id);
 
@@ -111,10 +119,16 @@ export default function EditarProdutoPage() {
           <p className="mt-1 text-sm text-slate-300">ID: {p.id}</p>
         </div>
         <div className="flex gap-3">
-          <Link href={`/admin/produtos/${id}/midia`} className="rounded-md bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700">
+          <Link
+            href={`/admin/produtos/${id}/midia`}
+            className="rounded-md bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700"
+          >
             Mídia
           </Link>
-          <Link href={`/admin/produtos/${id}/estoque`} className="rounded-md bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700">
+          <Link
+            href={`/admin/produtos/${id}/estoque`}
+            className="rounded-md bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700"
+          >
             Estoque
           </Link>
         </div>
@@ -189,10 +203,25 @@ export default function EditarProdutoPage() {
           />
         </label>
 
-        <label className="flex items-center gap-2 text-sm text-slate-200">
-          <input type="checkbox" checked={p.active} onChange={(e) => setP({ ...p, active: e.target.checked })} />
-          Ativo
-        </label>
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="flex items-center gap-2 text-sm text-slate-200">
+            <input
+              type="checkbox"
+              checked={p.active}
+              onChange={(e) => setP({ ...p, active: e.target.checked })}
+            />
+            Ativo
+          </label>
+
+          <label className="flex items-center gap-2 text-sm text-slate-200">
+            <input
+              type="checkbox"
+              checked={Boolean((p as any).featured)}
+              onChange={(e) => setP({ ...p, featured: e.target.checked } as any)}
+            />
+            Destaque (Catálogo)
+          </label>
+        </div>
 
         <div className="flex items-center justify-between">
           <button
