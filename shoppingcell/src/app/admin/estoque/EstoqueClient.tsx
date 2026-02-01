@@ -25,64 +25,80 @@ function badge(status: string) {
 
 export function EstoqueClient({ rows }: { rows: Row[] }) {
   const [view, setView] = useState<'cards' | 'table'>('cards');
+  const [q, setQ] = useState('');
+
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    if (!term) return rows;
+    return rows.filter((r) => r.name.toLowerCase().includes(term) || r.slug.toLowerCase().includes(term));
+  }, [rows, q]);
 
   const summary = useMemo(() => {
-    const low = rows.filter((r) => r.status === 'Baixo').length;
-    const zero = rows.filter((r) => r.status === 'Zerado').length;
+    const low = filtered.filter((r) => r.status === 'Baixo').length;
+    const zero = filtered.filter((r) => r.status === 'Zerado').length;
     return { low, zero };
-  }, [rows]);
+  }, [filtered]);
 
   return (
     <Panel>
       <div className="border-b border-white/10 px-6 py-5">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="text-sm font-semibold text-slate-200">Itens</div>
-            <div className="mt-1 text-xs text-slate-400">{rows.length} produtos</div>
+            <div className="mt-1 text-xs text-slate-400">{filtered.length} produtos</div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200">
-              Baixo: <span className="font-semibold">{summary.low}</span>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200">
-              Zerado: <span className="font-semibold">{summary.zero}</span>
-            </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Buscar por nome…"
+              className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-yellow-500/40 focus:outline-none sm:w-72"
+            />
 
-            <div className="ml-0 flex gap-2 md:ml-3">
-              <button
-                onClick={() => setView('cards')}
-                className={
-                  'rounded-full px-3 py-1.5 text-xs font-semibold ' +
-                  (view === 'cards'
-                    ? 'bg-white/10 text-white'
-                    : 'bg-slate-950 text-slate-300 hover:bg-white/5')
-                }
-              >
-                Cards
-              </button>
-              <button
-                onClick={() => setView('table')}
-                className={
-                  'rounded-full px-3 py-1.5 text-xs font-semibold ' +
-                  (view === 'table'
-                    ? 'bg-white/10 text-white'
-                    : 'bg-slate-950 text-slate-300 hover:bg-white/5')
-                }
-              >
-                Tabela
-              </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200">
+                Baixo: <span className="font-semibold">{summary.low}</span>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200">
+                Zerado: <span className="font-semibold">{summary.zero}</span>
+              </div>
+
+              <div className="ml-0 flex gap-2 md:ml-3">
+                <button
+                  onClick={() => setView('cards')}
+                  className={
+                    'rounded-full px-3 py-1.5 text-xs font-semibold ' +
+                    (view === 'cards'
+                      ? 'bg-white/10 text-white'
+                      : 'bg-slate-950 text-slate-300 hover:bg-white/5')
+                  }
+                >
+                  Cards
+                </button>
+                <button
+                  onClick={() => setView('table')}
+                  className={
+                    'rounded-full px-3 py-1.5 text-xs font-semibold ' +
+                    (view === 'table'
+                      ? 'bg-white/10 text-white'
+                      : 'bg-slate-950 text-slate-300 hover:bg-white/5')
+                  }
+                >
+                  Tabela
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {rows.length === 0 ? (
-        <EmptyState title="Sem produtos" description="Sincronize a planilha para começar." />
+      {filtered.length === 0 ? (
+        <EmptyState title="Nenhum item encontrado" description="Tente outro termo de busca." />
       ) : view === 'cards' ? (
         <div className="p-6">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {rows.map((r) => (
+            {filtered.map((r) => (
               <div
                 key={r.id}
                 className="group relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-slate-950 to-slate-950/60 shadow-[0_10px_40px_rgba(0,0,0,0.35)]"
@@ -154,7 +170,7 @@ export function EstoqueClient({ rows }: { rows: Row[] }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {filtered.map((r) => (
                 <tr key={r.id} className="border-b border-white/5 hover:bg-white/5">
                   <td className="px-6 py-4 font-semibold text-slate-100">{r.name}</td>
                   <td className="px-6 py-4 text-slate-200">{r.quantity}</td>
