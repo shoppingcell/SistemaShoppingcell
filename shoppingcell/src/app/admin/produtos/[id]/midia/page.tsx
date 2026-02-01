@@ -283,9 +283,15 @@ export default function MidiaProdutoPage() {
                 key={m.id}
                 className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/30 p-3"
               >
-                <div className="min-w-0">
-                  <div className="truncate text-sm text-slate-200">{m.url}</div>
-                  <div className="text-xs text-slate-400">{m.alt ?? '—'}</div>
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="h-12 w-12 overflow-hidden rounded-lg border border-slate-800 bg-slate-900/50">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={m.url} alt={m.alt ?? 'Mídia'} className="h-full w-full object-contain" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm text-slate-200">{m.url}</div>
+                    <div className="text-xs text-slate-400">{m.alt ?? '—'}</div>
+                  </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <button

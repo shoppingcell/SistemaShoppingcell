@@ -89,8 +89,14 @@ export function EstoqueClient({ rows }: { rows: Row[] }) {
               >
                 <div className="aspect-[4/3] w-full bg-slate-900/40">
                   {r.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={r.imageUrl} alt={r.name} className="h-full w-full object-cover opacity-95" />
+                    <div className="flex h-full w-full items-center justify-center bg-slate-900/40 p-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={r.imageUrl}
+                        alt={r.name}
+                        className="h-full w-full object-contain opacity-95"
+                      />
+                    </div>
                   ) : (
                     <div className="flex h-full w-full items-center justify-center">
                       <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-slate-400">
