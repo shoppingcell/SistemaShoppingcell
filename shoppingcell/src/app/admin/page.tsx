@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { createSupabaseServerClient } from '@/lib/supabaseServer';
 import { ArrowUpRight, Boxes, ClipboardList, DollarSign } from 'lucide-react';
 import DashboardCharts, { type DashboardDay } from './_components/DashboardCharts';
+import { InventoryStatusMini } from './_components/InventoryStatusMini';
 import PremiumCard from './_components/PremiumCard';
 import StockGauge from './_components/StockGauge';
 
@@ -115,6 +116,7 @@ export default async function AdminHome() {
     (r: any) => (r.quantity ?? 0) > 0 && (r.quantity ?? 0) < (r.min_quantity ?? 0),
   ).length;
   const zeroStock = (inventory ?? []).filter((r: any) => (r.quantity ?? 0) <= 0).length;
+  const okStock = Math.max(0, (inventory ?? []).length - lowStock - zeroStock);
 
   const withMargin = (products ?? []).filter((p: any) => p.price != null && p.cost_price != null);
   const avgMargin =
@@ -220,6 +222,71 @@ export default async function AdminHome() {
         </div>
         <PremiumCard title="Stock Health" right={<span className="text-yellow-300">{stockHealth}%</span>}>
           <StockGauge value={stockHealth} />
+        </PremiumCard>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <PremiumCard
+          title="Status do estoque"
+          right={
+            <Link href="/admin/estoque" className="text-xs text-slate-400 hover:text-white">
+              Ver estoque
+            </Link>
+          }
+        >
+          <InventoryStatusMini ok={okStock} low={lowStock} zero={zeroStock} />
+        </PremiumCard>
+
+        <PremiumCard
+          title="Saúde de margem"
+          right={
+            <Link href="/admin/produtos" className="text-xs text-slate-400 hover:text-white">
+              Ver produtos
+            </Link>
+          }
+        >
+          <div className="mt-1 grid gap-2">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Produtos cadastrados
+              </div>
+              <div className="mt-2 text-3xl font-extrabold text-slate-100">{productCount}</div>
+              <div className="mt-1 text-xs text-slate-500">Ativos: {activeCount}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Margem média (preço - custo)
+              </div>
+              <div className="mt-2 text-2xl font-extrabold text-slate-100">
+                {avgMargin == null ? '—' : money(avgMargin)}
+              </div>
+              <div className="mt-1 text-xs text-slate-500">Itens travados manual: {lockedCount}</div>
+            </div>
+          </div>
+        </PremiumCard>
+
+        <PremiumCard title="Atalhos">
+          <ul className="mt-1 list-disc space-y-2 pl-5 text-sm text-slate-300">
+            <li>
+              Ver lista de{' '}
+              <Link className="font-semibold text-yellow-300 hover:text-yellow-200" href="/admin/estoque">
+                baixo estoque
+              </Link>
+              .
+            </li>
+            <li>
+              <Link className="font-semibold text-yellow-300 hover:text-yellow-200" href="/admin/pedidos">
+                Pedidos
+              </Link>{' '}
+              e marcação de pagamento.
+            </li>
+            <li>
+              <Link className="font-semibold text-yellow-300 hover:text-yellow-200" href="/admin/financeiro">
+                Financeiro
+              </Link>{' '}
+              (entradas/saídas/contas a pagar).
+            </li>
+          </ul>
         </PremiumCard>
       </div>
 
