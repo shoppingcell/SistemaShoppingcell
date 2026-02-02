@@ -1,8 +1,16 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabaseBrowser as supabase } from '@/lib/supabaseBrowser';
+import { PageHeader } from '@/app/admin/_components/ui/PageHeader';
+import { Panel } from '@/app/admin/_components/ui/Panel';
+import { Button } from '@/app/admin/_components/ui/Button';
+import { Modal } from '@/app/admin/_components/ui/Modal';
+import { Input } from '@/app/admin/_components/ui/Input';
+import { PaymentBadge, StatusBadge } from '@/app/admin/pedidos/OrderBadges';
+import { buildWhatsAppUrl } from '@/app/admin/pedidos/WhatsApp';
 
 function money(n: number | null | undefined) {
   if (n == null) return '—';
@@ -18,6 +26,11 @@ export default function PedidoDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<any>(null);
   const [items, setItems] = useState<any[]>([]);
+
+  const [modal, setModal] = useState<null | 'payment'>(null);
+  const [saving, setSaving] = useState(false);
+  const [paidAmount, setPaidAmount] = useState('');
+  const [paidCategory, setPaidCategory] = useState('Vendas');
 
   async function load() {
     setLoading(true);
@@ -72,7 +85,6 @@ export default function PedidoDetailPage() {
       setItems((its ?? []).map((it: any) => ({ ...it, product: byId.get(it.product_id) })));
       setLoading(false);
     })();
-     
   }, [id]);
 
   const total = useMemo(
@@ -105,14 +117,14 @@ export default function PedidoDetailPage() {
 
   async function sendWhatsApp() {
     setError(null);
-    const to = (process.env.NEXT_PUBLIC_WHATSAPP_E164 || '').replace(/\D/g, '');
+    const to = process.env.NEXT_PUBLIC_WHATSAPP_E164 || '';
     if (!to) {
       setError('NEXT_PUBLIC_WHATSAPP_E164 não configurado.');
       return;
     }
 
     const text = buildWhatsAppText();
-    const url = `https://wa.me/${to}?text=${encodeURIComponent(text)}`;
+    const url = buildWhatsAppUrl(to, text);
     window.open(url, '_blank', 'noopener,noreferrer');
 
     await supabase.from('orders').update({ status: 'sent' }).eq('id', id);
@@ -132,72 +144,189 @@ export default function PedidoDetailPage() {
     window.location.reload();
   }
 
+  async function setPaymentStatus(status: 'paid' | 'pending') {
+    setSaving(true);
+    setError(null);
+
+    const { error: upErr } = await supabase
+      .from('orders')
+      .update({ payment_status: status } as any)
+      .eq('id', id);
+    if (upErr) {
+      setError(upErr.message + ' (rode supabase/admin_patch_orders_payment.sql)');
+      setSaving(false);
+      return;
+    }
+
+    router.refresh();
+    window.location.reload();
+  }
+
+  async function markAsPaidAndRegister() {
+    setSaving(true);
+    setError(null);
+
+    const amt = paidAmount.trim() ? Number(paidAmount.replace(',', '.')) : total;
+
+    const { error: txErr } = await supabase.from('finance_transactions').insert({
+      type: 'income',
+      category: paidCategory.trim() || 'Vendas',
+      description: `Pedido ${String(id).slice(0, 8)} (pago)`,
+      amount: amt,
+      occurred_at: new Date().toISOString(),
+      order_id: id,
+    } as any);
+
+    if (txErr) {
+      setError(txErr.message);
+      setSaving(false);
+      return;
+    }
+
+    const { error: upErr } = await supabase
+      .from('orders')
+      .update({ payment_status: 'paid' } as any)
+      .eq('id', id);
+    if (upErr) {
+      setError(upErr.message + ' (rode supabase/admin_patch_orders_payment.sql)');
+      setSaving(false);
+      return;
+    }
+
+    setModal(null);
+    router.refresh();
+    window.location.reload();
+  }
+
   if (loading) return <div className="text-slate-300">Carregando…</div>;
   if (error) return <div className="text-red-200">Erro: {error}</div>;
 
+  const paymentStatus = (order as any)?.payment_status ?? 'pending';
+
   return (
     <div className="grid gap-6">
-      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
-        <div>
-          <h1 className="text-2xl font-extrabold">Pedido</h1>
-          <p className="mt-1 text-sm text-slate-400">Status: {order?.status}</p>
-        </div>
-        <div className="flex flex-col gap-2 md:flex-row">
-          <button
-            onClick={sendWhatsApp}
-            className="rounded-xl bg-green-600 px-5 py-3 text-sm font-semibold text-white hover:bg-green-500"
-          >
-            Enviar no WhatsApp
-          </button>
-          <button
-            onClick={confirmOrder}
-            className="rounded-xl bg-yellow-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-yellow-400"
-          >
-            Confirmar (baixar estoque)
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        kicker="Pedidos"
+        title="Pedido"
+        subtitle={`ID: ${String(id).slice(0, 8)}`}
+        actions={
+          <Link href="/admin/pedidos" className="text-sm font-semibold text-slate-200 hover:text-white">
+            ← Voltar
+          </Link>
+        }
+      />
 
-      <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
-        <div className="text-sm text-slate-400">Cliente</div>
-        <div className="mt-1 text-lg font-semibold text-slate-200">
-          {order?.customers?.name ?? order?.customer_name ?? '—'}
-        </div>
-        <div className="text-sm text-slate-400">
-          {order?.customers?.phone ?? order?.customer_phone ?? '—'}
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
-        <div className="text-sm font-semibold">Itens</div>
-        <div className="mt-4 grid gap-2">
-          {items.map((it) => (
-            <div
-              key={it.id}
-              className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/30 p-3"
-            >
-              <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-slate-200">
-                  {it.product?.name ?? it.product_id}
-                </div>
-                <div className="text-xs text-slate-500">
-                  {it.product?.sheet_code ? `Código: ${it.product.sheet_code}` : '—'}
-                </div>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Panel className="lg:col-span-2">
+          <div className="border-b border-white/10 px-6 py-5">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge status={order?.status} />
+                <PaymentBadge status={paymentStatus} />
               </div>
-              <div className="text-right">
-                <div className="text-sm text-slate-200">{it.quantity}x</div>
-                <div className="text-xs text-slate-400">{money(it.price)}</div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="ghost" onClick={sendWhatsApp}>
+                  Enviar no WhatsApp
+                </Button>
+                <Button variant="primary" onClick={confirmOrder}>
+                  Confirmar (baixar estoque)
+                </Button>
               </div>
             </div>
-          ))}
-        </div>
-        <div className="mt-4 flex items-center justify-between text-sm">
-          <div className="text-slate-400">Total</div>
-          <div className="font-semibold text-slate-200">{money(total)}</div>
-        </div>
+          </div>
+
+          <div className="px-6 py-5">
+            <div className="grid gap-2">
+              {items.map((it) => (
+                <div
+                  key={it.id}
+                  className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-4"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-extrabold text-slate-100">
+                      {it.product?.name ?? it.product_id}
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {it.product?.sheet_code ? `Código: ${it.product.sheet_code}` : '—'}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-extrabold text-slate-100">{it.quantity}x</div>
+                    <div className="mt-1 text-xs text-slate-400">{money(it.price)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 flex items-center justify-between">
+              <div className="text-sm text-slate-400">Total</div>
+              <div className="text-xl font-extrabold text-yellow-400">{money(total)}</div>
+            </div>
+          </div>
+        </Panel>
+
+        <Panel>
+          <div className="border-b border-white/10 px-6 py-5">
+            <div className="text-sm font-semibold text-slate-200">Cliente</div>
+          </div>
+          <div className="px-6 py-5">
+            <div className="text-lg font-extrabold text-slate-100">
+              {order?.customers?.name ?? order?.customer_name ?? '—'}
+            </div>
+            <div className="mt-1 text-sm text-slate-400">
+              {order?.customers?.phone ?? order?.customer_phone ?? '—'}
+            </div>
+
+            <div className="mt-4 grid gap-2">
+              <Button variant="success" disabled={saving} onClick={() => setModal('payment')}>
+                Marcar como pago
+              </Button>
+              <Button variant="ghost" disabled={saving} onClick={() => void setPaymentStatus('pending')}>
+                Marcar como pendente
+              </Button>
+            </div>
+
+            {error && <div className="mt-4 text-sm text-red-200">{error}</div>}
+          </div>
+        </Panel>
       </div>
 
-      {error && <div className="text-red-200">{error}</div>}
+      <Modal open={modal === 'payment'} title="Confirmar pagamento" onClose={() => setModal(null)}>
+        <form
+          className="grid gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void markAsPaidAndRegister();
+          }}
+        >
+          <div className="text-sm text-slate-300">
+            Vai registrar uma entrada no Financeiro e marcar o pedido como{' '}
+            <span className="font-semibold">Pago</span>.
+          </div>
+
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Valor (opcional)
+          </label>
+          <Input
+            value={paidAmount}
+            onChange={(e) => setPaidAmount(e.target.value)}
+            placeholder={String(total)}
+          />
+
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Categoria</label>
+          <Input
+            value={paidCategory}
+            onChange={(e) => setPaidCategory(e.target.value)}
+            placeholder="Vendas"
+          />
+
+          {error && <div className="text-sm text-red-200">{error}</div>}
+
+          <Button disabled={saving} type="submit">
+            Confirmar pagamento
+          </Button>
+        </form>
+      </Modal>
     </div>
   );
 }

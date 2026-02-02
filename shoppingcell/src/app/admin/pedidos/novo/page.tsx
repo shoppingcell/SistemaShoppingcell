@@ -1,8 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabaseBrowser as supabase } from '@/lib/supabaseBrowser';
+import { PageHeader } from '@/app/admin/_components/ui/PageHeader';
+import { Panel } from '@/app/admin/_components/ui/Panel';
+import { Input } from '@/app/admin/_components/ui/Input';
+import { Select } from '@/app/admin/_components/ui/Select';
+import { Button } from '@/app/admin/_components/ui/Button';
 
 type Product = {
   id: string;
@@ -146,180 +152,207 @@ export default function NovoPedidoPage() {
 
   return (
     <div className="grid gap-6">
-      <div>
-        <h1 className="text-2xl font-extrabold">Novo pedido</h1>
-        <p className="mt-1 text-sm text-slate-400">Monte os itens e depois envie pelo WhatsApp.</p>
-      </div>
+      <PageHeader
+        kicker="Pedidos"
+        title="Novo pedido"
+        subtitle="Monte os itens e depois envie pelo WhatsApp."
+        actions={
+          <Link href="/admin/pedidos" className="text-sm font-semibold text-slate-200 hover:text-white">
+            ← Voltar
+          </Link>
+        }
+      />
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5 md:col-span-2">
-          <div className="text-sm font-semibold">Adicionar produtos</div>
-          <input
-            className="mt-3 w-full rounded-md bg-slate-900 p-3 text-white"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar por nome ou código..."
-          />
-
-          <div className="mt-4 grid gap-2">
-            {filtered.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => addProduct(p)}
-                className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/30 p-3 text-left hover:bg-slate-900/50"
-              >
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-slate-200">{p.name}</div>
-                  <div className="text-xs text-slate-500">
-                    {p.sheet_code ? `Código: ${p.sheet_code}` : '—'}
-                  </div>
-                </div>
-                <div className="text-xs text-slate-300">{money(p.price ?? null)}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
-          <div className="text-sm font-semibold">Cliente</div>
-          <div className="mt-3 grid gap-3">
-            <label className="text-sm text-slate-200">
-              Cliente cadastrado
-              <select
-                className="mt-1 w-full rounded-md bg-slate-900 p-3 text-white"
-                value={customerId}
-                onChange={(e) => {
-                  const id = e.target.value;
-                  setCustomerId(id);
-                  const c = customers.find((x) => x.id === id);
-                  if (c) {
-                    setCustomerName(c.name);
-                    setCustomerPhone(c.phone || '');
-                  }
-                }}
-              >
-                <option value="">— Selecionar —</option>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-              <div className="mt-1 text-xs text-slate-500">
-                Se não escolher, você pode preencher manualmente.
-              </div>
-            </label>
-
-            <label className="text-sm text-slate-200">
-              Nome
-              <input
-                className="mt-1 w-full rounded-md bg-slate-900 p-3 text-white"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Panel className="lg:col-span-2">
+          <div className="border-b border-white/10 px-6 py-5">
+            <div className="text-sm font-semibold text-slate-200">Adicionar produtos</div>
+            <div className="mt-3">
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Buscar por nome ou código…"
               />
-            </label>
-            <label className="text-sm text-slate-200">
-              WhatsApp
-              <input
-                className="mt-1 w-full rounded-md bg-slate-900 p-3 text-white"
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                placeholder="ex: 5594999999999"
-              />
-              <div className="mt-1 text-xs text-slate-500">Só números (com DDI/DDD) se possível.</div>
-            </label>
-            <label className="text-sm text-slate-200">
-              Observações
-              <textarea
-                className="mt-1 min-h-[80px] w-full rounded-md bg-slate-900 p-3 text-white"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-              />
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
-        <div className="flex items-end justify-between">
-          <div>
-            <div className="text-sm font-semibold">Itens do pedido</div>
-            <div className="mt-1 text-xs text-slate-500">
-              Total itens: {totals.totalItems} • Total: {money(totals.totalValue)}
             </div>
           </div>
+
+          <div className="px-6 py-5">
+            <div className="grid gap-2">
+              {filtered.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => addProduct(p)}
+                  className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-4 text-left hover:bg-white/10"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-extrabold text-slate-100">{p.name}</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {p.sheet_code ? `Código: ${p.sheet_code}` : '—'}
+                    </div>
+                  </div>
+                  <div className="text-xs font-semibold text-slate-200">{money(p.price ?? null)}</div>
+                </button>
+              ))}
+              {filtered.length === 0 && (
+                <div className="text-sm text-slate-400">Nenhum produto encontrado.</div>
+              )}
+            </div>
+          </div>
+        </Panel>
+
+        <Panel>
+          <div className="border-b border-white/10 px-6 py-5">
+            <div className="text-sm font-semibold text-slate-200">Cliente</div>
+            <div className="mt-1 text-xs text-slate-500">Selecione ou preencha manualmente.</div>
+          </div>
+
+          <div className="px-6 py-5 grid gap-3">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Cliente cadastrado
+              </div>
+              <div className="mt-2">
+                <Select
+                  value={customerId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setCustomerId(id);
+                    const c = customers.find((x) => x.id === id);
+                    if (c) {
+                      setCustomerName(c.name);
+                      setCustomerPhone(c.phone || '');
+                    }
+                  }}
+                >
+                  <option value="">— Selecionar —</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nome</div>
+              <div className="mt-2">
+                <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+              </div>
+            </div>
+
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">WhatsApp</div>
+              <div className="mt-2">
+                <Input
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  placeholder="ex: 5594999999999"
+                />
+              </div>
+              <div className="mt-1 text-xs text-slate-500">Só números (com DDI/DDD) se possível.</div>
+            </div>
+
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Observações</div>
+              <div className="mt-2">
+                <textarea
+                  className="min-h-[90px] w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-yellow-400/40"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+        </Panel>
+      </div>
+
+      <Panel>
+        <div className="border-b border-white/10 px-6 py-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-slate-200">Itens do pedido</div>
+              <div className="mt-1 text-xs text-slate-500">
+                Total itens: {totals.totalItems} • Total: {money(totals.totalValue)}
+              </div>
+            </div>
+            <Button disabled={saving} onClick={saveDraft}>
+              Salvar rascunho
+            </Button>
+          </div>
         </div>
 
-        {items.length === 0 ? (
-          <div className="mt-4 text-sm text-slate-500">Nenhum item adicionado ainda.</div>
-        ) : (
-          <div className="mt-4 grid gap-2">
-            {items.map((it) => (
-              <div
-                key={it.product.id}
-                className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/30 p-3"
-              >
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-slate-200">{it.product.name}</div>
-                  <div className="text-xs text-slate-500">
-                    {it.product.sheet_code ? `Código: ${it.product.sheet_code}` : '—'}
+        <div className="px-6 py-5">
+          {items.length === 0 ? (
+            <div className="text-sm text-slate-400">Nenhum item adicionado ainda.</div>
+          ) : (
+            <div className="grid gap-2">
+              {items.map((it) => (
+                <div
+                  key={it.product.id}
+                  className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-extrabold text-slate-100">{it.product.name}</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {it.product.sheet_code ? `Código: ${it.product.sheet_code}` : '—'}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 sm:justify-end">
+                    <div className="text-xs font-semibold text-slate-300">
+                      {money(it.product.price ?? null)}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="rounded-full border border-white/10 bg-slate-950 px-3 py-2 text-xs font-extrabold text-slate-100 hover:bg-white/5"
+                        onClick={() =>
+                          setItems((curr) =>
+                            curr.map((x) =>
+                              x.product.id === it.product.id
+                                ? { ...x, quantity: Math.max(1, x.quantity - 1) }
+                                : x,
+                            ),
+                          )
+                        }
+                      >
+                        −
+                      </button>
+                      <div className="w-10 text-center text-sm font-extrabold text-slate-100">
+                        {it.quantity}
+                      </div>
+                      <button
+                        type="button"
+                        className="rounded-full border border-white/10 bg-slate-950 px-3 py-2 text-xs font-extrabold text-slate-100 hover:bg-white/5"
+                        onClick={() =>
+                          setItems((curr) =>
+                            curr.map((x) =>
+                              x.product.id === it.product.id ? { ...x, quantity: x.quantity + 1 } : x,
+                            ),
+                          )
+                        }
+                      >
+                        +
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      className="rounded-full bg-red-950/30 px-4 py-2 text-xs font-semibold text-red-200 hover:bg-red-950/50"
+                      onClick={() => setItems((curr) => curr.filter((x) => x.product.id !== it.product.id))}
+                    >
+                      Remover
+                    </button>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200"
-                    onClick={() =>
-                      setItems((curr) =>
-                        curr.map((x) =>
-                          x.product.id === it.product.id
-                            ? { ...x, quantity: Math.max(1, x.quantity - 1) }
-                            : x,
-                        ),
-                      )
-                    }
-                  >
-                    -
-                  </button>
-                  <div className="w-10 text-center text-sm text-slate-200">{it.quantity}</div>
-                  <button
-                    type="button"
-                    className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200"
-                    onClick={() =>
-                      setItems((curr) =>
-                        curr.map((x) =>
-                          x.product.id === it.product.id ? { ...x, quantity: x.quantity + 1 } : x,
-                        ),
-                      )
-                    }
-                  >
-                    +
-                  </button>
-                  <button
-                    type="button"
-                    className="ml-2 rounded-md bg-red-950/30 px-3 py-2 text-xs font-semibold text-red-200 hover:bg-red-950/50"
-                    onClick={() => setItems((curr) => curr.filter((x) => x.product.id !== it.product.id))}
-                  >
-                    Remover
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
 
-        <div className="mt-5 flex items-center justify-between">
-          <div className="text-sm text-red-200">{error ?? ''}</div>
-          <button
-            disabled={saving}
-            onClick={saveDraft}
-            className="rounded-xl bg-yellow-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-yellow-400 disabled:opacity-60"
-          >
-            Salvar rascunho
-          </button>
+          {error && <div className="mt-4 text-sm text-red-200">{error}</div>}
         </div>
-      </div>
+      </Panel>
     </div>
   );
 }

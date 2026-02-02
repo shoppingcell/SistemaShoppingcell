@@ -2,25 +2,20 @@ import Link from 'next/link';
 import { createSupabaseServerClient } from '@/lib/supabaseServer';
 import { PageHeader } from '@/app/admin/_components/ui/PageHeader';
 import { Panel } from '@/app/admin/_components/ui/Panel';
+import { PaymentBadge, StatusBadge } from '@/app/admin/pedidos/OrderBadges';
 
 export const dynamic = 'force-dynamic';
-
-function badge(status: string) {
-  const base = 'rounded-full px-3 py-1 text-xs font-semibold';
-  if (status === 'confirmed') return `${base} bg-green-500/15 text-green-300`;
-  if (status === 'sent') return `${base} bg-yellow-400/15 text-yellow-200`;
-  if (status === 'cancelled') return `${base} bg-red-500/15 text-red-200`;
-  return `${base} bg-white/10 text-slate-200`;
-}
 
 export default async function PedidosPage() {
   const supabase = await createSupabaseServerClient();
 
   const { data: orders, error } = await supabase
     .from('orders')
-    .select('id,status,customer_name,customer_phone,customer_id,created_at,customers(name,phone)')
+    .select(
+      'id,status,payment_status,customer_name,customer_phone,customer_id,created_at,customers(name,phone)',
+    )
     .order('created_at', { ascending: false })
-    .limit(50);
+    .limit(80);
 
   return (
     <div className="grid gap-6">
@@ -57,6 +52,7 @@ export default async function PedidosPage() {
               <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr className="border-b border-white/10">
                   <th className="px-6 py-4">Status</th>
+                  <th className="px-6 py-4">Pagamento</th>
                   <th className="px-6 py-4">Cliente</th>
                   <th className="px-6 py-4">WhatsApp</th>
                   <th className="px-6 py-4">Criado</th>
@@ -67,7 +63,10 @@ export default async function PedidosPage() {
                 {(orders ?? []).map((o) => (
                   <tr key={o.id} className="border-b border-white/5 hover:bg-white/5">
                     <td className="px-6 py-4">
-                      <span className={badge(o.status)}>{o.status}</span>
+                      <StatusBadge status={o.status as any} />
+                    </td>
+                    <td className="px-6 py-4">
+                      <PaymentBadge status={(o as any).payment_status ?? 'pending'} />
                     </td>
                     <td className="px-6 py-4 font-semibold text-slate-100">
                       {(o as any).customers?.name ?? o.customer_name ?? '—'}
@@ -90,7 +89,7 @@ export default async function PedidosPage() {
                 ))}
                 {(orders ?? []).length === 0 && (
                   <tr>
-                    <td className="px-6 py-10 text-slate-400" colSpan={5}>
+                    <td className="px-6 py-10 text-slate-400" colSpan={6}>
                       Nenhum pedido ainda.
                     </td>
                   </tr>
