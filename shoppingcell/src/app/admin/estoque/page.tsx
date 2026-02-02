@@ -1,6 +1,7 @@
 import { createSupabaseServerClient } from '@/lib/supabaseServer';
 import { PageHeader } from '@/app/admin/_components/ui/PageHeader';
 import { EstoqueClient } from '@/app/admin/estoque/EstoqueClient';
+import { EstoqueCharts } from '@/app/admin/estoque/EstoqueCharts';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,6 +63,7 @@ export default async function EstoquePage() {
     <div className="grid gap-6">
       <PageHeader kicker="Estoque" title="Estoque" subtitle="Visão geral (cards + tabela)." />
 
+      <EstoqueCharts rows={rows as any} />
       <EstoqueClient rows={rows as any} />
     </div>
   );
