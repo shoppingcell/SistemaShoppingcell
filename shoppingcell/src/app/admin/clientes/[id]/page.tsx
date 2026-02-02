@@ -1,8 +1,14 @@
 'use client';
 
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabaseBrowser as supabase } from '@/lib/supabaseBrowser';
+import { PageHeader } from '@/app/admin/_components/ui/PageHeader';
+import { Panel } from '@/app/admin/_components/ui/Panel';
+import { Button } from '@/app/admin/_components/ui/Button';
+import { Input } from '@/app/admin/_components/ui/Input';
+import { buildWhatsAppUrl } from '@/app/admin/pedidos/WhatsApp';
 
 function onlyDigits(s: string) {
   return (s || '').replace(/\D/g, '');
@@ -63,95 +69,120 @@ export default function ClienteDetailPage() {
     router.refresh();
   }
 
-  if (loading) return <div className="text-slate-600">Carregando…</div>;
-  if (error) return <div className="text-red-600">Erro: {error}</div>;
+  const wa = useMemo(() => {
+    if (!c?.phone) return null;
+    return buildWhatsAppUrl(String(c.phone), `Olá ${String(c.name || '').trim()}!`);
+  }, [c?.name, c?.phone]);
+
+  if (loading) return <div className="text-slate-300">Carregando…</div>;
+  if (error) return <div className="text-red-200">Erro: {error}</div>;
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Clientes</div>
-          <h1 className="mt-1 text-3xl font-extrabold tracking-tight">{c?.name}</h1>
-          <p className="mt-1 text-sm text-slate-500">Editar dados do cliente.</p>
-        </div>
+      <PageHeader
+        kicker="Clientes"
+        title={c?.name || 'Cliente'}
+        subtitle="Editar dados do cliente."
+        actions={
+          <div className="flex items-center gap-2">
+            <Link href="/admin/clientes" className="text-sm font-semibold text-slate-200 hover:text-white">
+              ← Voltar
+            </Link>
+            {wa && (
+              <a
+                href={wa}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-2xl bg-green-600 px-5 py-3 text-sm font-extrabold text-white hover:bg-green-500"
+              >
+                WhatsApp
+              </a>
+            )}
+            <Button onClick={save}>Salvar</Button>
+          </div>
+        }
+      />
 
-        <div className="flex gap-3">
-          <button
-            onClick={save}
-            className="rounded-2xl bg-yellow-400 px-5 py-3 text-sm font-extrabold text-slate-950 shadow-sm hover:bg-yellow-300"
-          >
-            Salvar
-          </button>
-          <button
-            onClick={() => {
-              router.push('/admin/clientes');
-              router.refresh();
-            }}
-            className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-50"
-          >
-            Voltar
-          </button>
-        </div>
-      </div>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Panel className="lg:col-span-2">
+          <div className="px-6 py-5">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nome*</div>
+                <div className="mt-2">
+                  <Input
+                    value={c?.name ?? ''}
+                    onChange={(e) => setC((v: any) => ({ ...v, name: e.target.value }))}
+                  />
+                </div>
+              </div>
 
-      <div className="rounded-3xl border border-white/10 bg-gradient-to-b from-slate-950 to-slate-950/60 p-6 shadow-[0_10px_40px_rgba(0,0,0,0.35)]">
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="text-sm text-slate-200">
-            Nome*
-            <input
-              className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-100 placeholder:text-slate-500"
-              value={c?.name ?? ''}
-              onChange={(e) => setC((v: any) => ({ ...v, name: e.target.value }))}
-            />
-          </label>
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">CPF/CNPJ</div>
+                <div className="mt-2">
+                  <Input
+                    value={c?.document ?? ''}
+                    onChange={(e) => setC((v: any) => ({ ...v, document: e.target.value }))}
+                  />
+                </div>
+              </div>
 
-          <label className="text-sm text-slate-200">
-            CPF/CNPJ
-            <input
-              className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-100 placeholder:text-slate-500"
-              value={c?.document ?? ''}
-              onChange={(e) => setC((v: any) => ({ ...v, document: e.target.value }))}
-            />
-          </label>
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">WhatsApp</div>
+                <div className="mt-2">
+                  <Input
+                    value={c?.phone ?? ''}
+                    onChange={(e) => setC((v: any) => ({ ...v, phone: e.target.value }))}
+                  />
+                </div>
+              </div>
 
-          <label className="text-sm text-slate-200">
-            WhatsApp
-            <input
-              className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-100 placeholder:text-slate-500"
-              value={c?.phone ?? ''}
-              onChange={(e) => setC((v: any) => ({ ...v, phone: e.target.value }))}
-            />
-          </label>
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Email</div>
+                <div className="mt-2">
+                  <Input
+                    value={c?.email ?? ''}
+                    onChange={(e) => setC((v: any) => ({ ...v, email: e.target.value }))}
+                  />
+                </div>
+              </div>
 
-          <label className="text-sm text-slate-200">
-            Email
-            <input
-              className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-100 placeholder:text-slate-500"
-              value={c?.email ?? ''}
-              onChange={(e) => setC((v: any) => ({ ...v, email: e.target.value }))}
-            />
-          </label>
+              <div className="md:col-span-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Observações
+                </div>
+                <div className="mt-2">
+                  <textarea
+                    className="min-h-[120px] w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-yellow-400/40"
+                    value={c?.notes ?? ''}
+                    onChange={(e) => setC((v: any) => ({ ...v, notes: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
 
-          <label className="text-sm text-slate-200 md:col-span-2">
-            Observações
-            <textarea
-              className="mt-2 min-h-[120px] w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-100 placeholder:text-slate-500"
-              value={c?.notes ?? ''}
-              onChange={(e) => setC((v: any) => ({ ...v, notes: e.target.value }))}
-            />
-          </label>
+            {error && <div className="mt-4 text-sm text-red-200">Erro: {error}</div>}
+          </div>
+        </Panel>
 
-          <label className="flex items-center gap-3 text-sm text-slate-200">
-            <input
-              type="checkbox"
-              checked={Boolean(c?.active)}
-              onChange={(e) => setC((v: any) => ({ ...v, active: e.target.checked }))}
-            />
-            Cliente ativo
-          </label>
-        </div>
-
-        {error && <div className="mt-4 text-sm text-red-200">Erro: {error}</div>}
+        <Panel>
+          <div className="border-b border-white/10 px-6 py-5">
+            <div className="text-sm font-semibold text-slate-200">Status</div>
+          </div>
+          <div className="px-6 py-5">
+            <label className="flex items-center gap-3 text-sm text-slate-200">
+              <input
+                type="checkbox"
+                checked={Boolean(c?.active)}
+                onChange={(e) => setC((v: any) => ({ ...v, active: e.target.checked }))}
+              />
+              Cliente ativo
+            </label>
+            <div className="mt-4 text-xs text-slate-500">
+              Desative para manter no histórico sem aparecer nas seleções.
+            </div>
+          </div>
+        </Panel>
       </div>
     </div>
   );
