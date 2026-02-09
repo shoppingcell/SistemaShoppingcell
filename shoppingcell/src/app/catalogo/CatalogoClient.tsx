@@ -1,115 +1,190 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
-import { formatBRLFromCents } from '@/lib/formatPrice';
-import { buildWhatsAppUrl } from '@/lib/whatsapp';
+import { useMemo, useState } from 'react';
 
 type Product = {
   id: string;
   name: string;
   slug: string;
   description: string | null;
-  base_price_cents: number;
   featured: boolean;
   imageUrl: string | null;
+  sheet_code?: string | null;
 };
 
-type CartItem = {
-  id: string;
-  name: string;
-  slug: string;
-  price_cents: number;
-  qty: number;
-};
+export default function CatalogoClient({ products }: { products: Product[] }) {
+  const [query, setQuery] = useState('');
 
-const LS_KEY = 'shoppingcell_cart_v1';
+  const filteredProducts = useMemo(() => {
+    const q = query
+      .trim()
+      .toLocaleLowerCase('pt-BR')
+      .normalize('NFD')
+       
+      .replace(/\p{Diacritic}/gu, '');
 
-function loadCart(): CartItem[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed;
-  } catch {
-    return [];
-  }
-}
+    if (!q) return products;
 
-function saveCart(items: CartItem[]) {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(LS_KEY, JSON.stringify(items));
-}
-
-export default function CatalogoClient({
-  products,
-  whatsappE164,
-}: {
-  products: Product[];
-  whatsappE164: string;
-}) {
-  const [cartOpen, setCartOpen] = useState(false);
-  const [cart, setCart] = useState<CartItem[]>(() => (typeof window === 'undefined' ? [] : loadCart()));
-
-  useEffect(() => {
-    saveCart(cart);
-  }, [cart]);
-
-  const featured = useMemo(() => products.filter((p) => p.featured), [products]);
-  const regular = useMemo(() => products.filter((p) => !p.featured), [products]);
-
-  const totalCents = useMemo(() => cart.reduce((a, i) => a + i.price_cents * i.qty, 0), [cart]);
-  const totalQty = useMemo(() => cart.reduce((a, i) => a + i.qty, 0), [cart]);
-
-  function addToCart(p: Product) {
-    setCart((prev) => {
-      const next = [...prev];
-      const idx = next.findIndex((x) => x.id === p.id);
-      if (idx >= 0) next[idx] = { ...next[idx], qty: next[idx].qty + 1 };
-      else next.push({ id: p.id, name: p.name, slug: p.slug, price_cents: p.base_price_cents, qty: 1 });
-      return next;
+    return products.filter((p) => {
+      const hay = [p.name, p.description ?? '', p.sheet_code ?? '']
+        .join(' ')
+        .toLocaleLowerCase('pt-BR')
+        .normalize('NFD')
+         
+        .replace(/\p{Diacritic}/gu, '');
+      return hay.includes(q);
     });
-    setCartOpen(true);
+  }, [products, query]);
+
+  const featured = useMemo(() => filteredProducts.filter((p) => p.featured), [filteredProducts]);
+  const regular = useMemo(() => filteredProducts.filter((p) => !p.featured), [filteredProducts]);
+
+  const [qtyById, setQtyById] = useState<Record<string, number>>({});
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function qtyFor(id: string) {
+    return Math.max(1, Number(qtyById[id] || 1));
   }
 
-  function inc(id: string) {
-    setCart((prev) => prev.map((i) => (i.id === id ? { ...i, qty: i.qty + 1 } : i)));
+  async function quote(p: Product) {
+    setError(null);
+    setLoadingId(p.id);
+
+    try {
+      const qty = qtyFor(p.id);
+      const res = await fetch('/api/whatsapp/quote', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          items: [
+            {
+              name: p.name,
+              code: (p.sheet_code || '').trim() || null,
+              qty,
+              url: `${window.location.origin}/produto/${p.slug}`,
+            },
+          ],
+          notes: null,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok || !json?.waLink) {
+        setError(json?.error || 'Falha ao gerar link do WhatsApp');
+        return;
+      }
+      window.open(json.waLink, '_blank', 'noopener,noreferrer');
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    } finally {
+      setLoadingId(null);
+    }
   }
 
-  function dec(id: string) {
-    setCart((prev) =>
-      prev.flatMap((i) => (i.id === id ? (i.qty <= 1 ? [] : [{ ...i, qty: i.qty - 1 }]) : [i])),
+  function Card(p: Product) {
+    const qty = qtyFor(p.id);
+    const busy = loadingId === p.id;
+
+    return (
+      <div key={p.id} className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
+        <Link href={`/produto/${p.slug}`} className="block">
+          <div className="aspect-[4/3] bg-slate-900/40">
+            {p.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={p.imageUrl} alt={p.name} className="h-full w-full object-contain p-2" />
+            ) : (
+              <div className="flex h-full items-center justify-center text-xs text-slate-500">Sem imagem</div>
+            )}
+          </div>
+          <div className="p-5">
+            <div className="text-lg font-semibold">{p.name}</div>
+            {p.sheet_code ? <div className="mt-1 text-xs text-slate-400">Cód: {p.sheet_code}</div> : null}
+            <div className="mt-2 line-clamp-2 text-sm text-slate-300">{p.description ?? '—'}</div>
+            <div className="mt-4 text-sm font-semibold text-slate-200">Cotação no WhatsApp (atacado)</div>
+          </div>
+        </Link>
+
+        <div className="px-5 pb-5">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setQtyById((curr) => ({ ...curr, [p.id]: Math.max(1, qty - 1) }))}
+              className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-extrabold text-slate-100 hover:bg-white/10"
+            >
+              −
+            </button>
+            <div className="w-12 text-center text-sm font-extrabold text-slate-100">{qty}</div>
+            <button
+              type="button"
+              onClick={() => setQtyById((curr) => ({ ...curr, [p.id]: qty + 1 }))}
+              className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-extrabold text-slate-100 hover:bg-white/10"
+            >
+              +
+            </button>
+
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => quote(p)}
+              className={
+                busy
+                  ? 'flex-1 rounded-xl bg-slate-800 px-4 py-2 text-sm font-extrabold text-slate-200'
+                  : 'flex-1 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-extrabold text-slate-950 hover:bg-emerald-400'
+              }
+            >
+              {busy ? 'Gerando…' : 'Solicitar cotação'}
+            </button>
+          </div>
+        </div>
+      </div>
     );
   }
 
-  function clear() {
-    setCart([]);
-  }
-
-  const waMessage = useMemo(() => {
-    if (cart.length === 0) return '';
-    const lines = cart.map((i) => `• ${i.qty}x ${i.name} — ${formatBRLFromCents(i.price_cents * i.qty)}`);
-    lines.push(`Total: ${formatBRLFromCents(totalCents)}`);
-    lines.push('');
-    lines.push('Quero finalizar esse pedido.');
-    return lines.join('\n');
-  }, [cart, totalCents]);
-
-  const waUrl = useMemo(() => buildWhatsAppUrl(whatsappE164, waMessage), [whatsappE164, waMessage]);
-
   return (
     <>
-      <div className="mt-6 flex items-center justify-between gap-3">
-        <div className="text-sm text-slate-300">{products.length} produtos</div>
-        <button
-          onClick={() => setCartOpen(true)}
-          className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 hover:bg-white/10"
-        >
-          Carrinho ({totalQty})
-        </button>
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-sm text-slate-300">
+          {filteredProducts.length} produto{filteredProducts.length === 1 ? '' : 's'}
+          {query.trim() ? <span className="text-slate-500"> (filtrado)</span> : null}
+        </div>
+
+        <div className="relative w-full sm:w-[380px]">
+          <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M21 21l-4.3-4.3m1.8-5.2a7 7 0 11-14 0 7 7 0 0114 0z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Pesquisar produto ou código…"
+            className="w-full rounded-2xl border border-white/10 bg-white/5 py-3 pl-10 pr-12 text-sm font-semibold text-slate-100 outline-none placeholder:text-slate-500 focus:border-white/20"
+          />
+          {query.trim() ? (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-extrabold text-slate-100 hover:bg-white/10"
+              aria-label="Limpar busca"
+            >
+              Limpar
+            </button>
+          ) : null}
+        </div>
       </div>
+
+      {error && (
+        <div className="mt-4 rounded-xl border border-red-900/40 bg-red-950/20 p-3 text-sm text-red-200">
+          {error}
+        </div>
+      )}
 
       {featured.length > 0 && (
         <section className="mt-8">
@@ -117,161 +192,19 @@ export default function CatalogoClient({
             <h2 className="text-lg font-extrabold">Destaques</h2>
             <div className="text-xs text-slate-400">Selecionados pela loja</div>
           </div>
-          <div className="mt-4 flex gap-4 overflow-x-auto pb-2">
-            {featured.map((p) => (
-              <div
-                key={p.id}
-                className="min-w-[260px] overflow-hidden rounded-2xl border border-white/10 bg-slate-950"
-              >
-                <Link href={`/produto/${p.slug}`} className="block">
-                  <div className="aspect-[4/3] bg-slate-900/40">
-                    {p.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.imageUrl} alt={p.name} className="h-full w-full object-contain p-2" />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-xs text-slate-500">
-                        Sem imagem
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-4">
-                    <div className="truncate text-sm font-extrabold">{p.name}</div>
-                    <div className="mt-2 text-base font-extrabold text-yellow-400">
-                      {formatBRLFromCents(p.base_price_cents)}
-                    </div>
-                  </div>
-                </Link>
-                <div className="p-4 pt-0">
-                  <button
-                    onClick={() => addToCart(p)}
-                    className="w-full rounded-xl bg-yellow-400 px-4 py-2 text-sm font-extrabold text-slate-950 hover:bg-yellow-300"
-                  >
-                    Adicionar ao carrinho
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{featured.map((p) => Card(p))}</div>
         </section>
       )}
 
       <section className="mt-8">
         <h2 className="text-lg font-extrabold">Produtos</h2>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {regular.map((p) => (
-            <div key={p.id} className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
-              <Link href={`/produto/${p.slug}`} className="block">
-                <div className="aspect-[4/3] bg-slate-900/40">
-                  {p.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.imageUrl} alt={p.name} className="h-full w-full object-contain p-2" />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-xs text-slate-500">
-                      Sem imagem
-                    </div>
-                  )}
-                </div>
-                <div className="p-5">
-                  <div className="text-lg font-semibold">{p.name}</div>
-                  <div className="mt-2 line-clamp-2 text-sm text-slate-300">{p.description ?? '—'}</div>
-                  <div className="mt-4 text-base font-bold text-yellow-400">
-                    {formatBRLFromCents(p.base_price_cents)}
-                  </div>
-                </div>
-              </Link>
-              <div className="px-5 pb-5">
-                <button
-                  onClick={() => addToCart(p)}
-                  className="w-full rounded-xl bg-yellow-400 px-4 py-2 text-sm font-extrabold text-slate-950 hover:bg-yellow-300"
-                >
-                  Adicionar ao carrinho
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {cartOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <button className="absolute inset-0 bg-black/70" onClick={() => setCartOpen(false)} />
-          <div className="relative h-full w-full max-w-md overflow-y-auto border-l border-white/10 bg-slate-950 p-6">
-            <div className="flex items-center justify-between">
-              <div className="text-lg font-extrabold">Carrinho</div>
-              <button
-                onClick={() => setCartOpen(false)}
-                className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10"
-              >
-                Fechar
-              </button>
-            </div>
-
-            {cart.length === 0 ? (
-              <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-5 text-sm text-slate-300">
-                Seu carrinho está vazio.
-              </div>
-            ) : (
-              <>
-                <div className="mt-6 grid gap-3">
-                  {cart.map((i) => (
-                    <div
-                      key={i.id}
-                      className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 p-4"
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-slate-100">{i.name}</div>
-                        <div className="mt-1 text-xs text-slate-400">
-                          {formatBRLFromCents(i.price_cents)} • subtotal{' '}
-                          {formatBRLFromCents(i.price_cents * i.qty)}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => dec(i.id)}
-                          className="rounded-full bg-white/10 px-3 py-2 text-sm font-extrabold text-white hover:bg-white/15"
-                        >
-                          −
-                        </button>
-                        <div className="w-8 text-center text-sm font-extrabold text-slate-100">{i.qty}</div>
-                        <button
-                          onClick={() => inc(i.id)}
-                          className="rounded-full bg-white/10 px-3 py-2 text-sm font-extrabold text-white hover:bg-white/15"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-6 flex items-center justify-between">
-                  <div className="text-sm text-slate-300">Total</div>
-                  <div className="text-xl font-extrabold text-yellow-400">
-                    {formatBRLFromCents(totalCents)}
-                  </div>
-                </div>
-
-                <div className="mt-4 grid gap-2">
-                  <a
-                    href={waUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-xl bg-emerald-500 px-4 py-3 text-center text-sm font-extrabold text-slate-950 hover:bg-emerald-400"
-                  >
-                    Finalizar no WhatsApp
-                  </a>
-                  <button
-                    onClick={clear}
-                    className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-200 hover:bg-white/10"
-                  >
-                    Limpar carrinho
-                  </button>
-                </div>
-              </>
-            )}
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{regular.map((p) => Card(p))}</div>
+        {regular.length === 0 && featured.length === 0 ? (
+          <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+            Nenhum produto encontrado. Tente outro termo.
           </div>
-        </div>
-      )}
+        ) : null}
+      </section>
     </>
   );
 }
