@@ -28,6 +28,7 @@ const navAdmin: NavItem[] = [
 
 const navSeller: NavItem[] = [
   { href: '/admin/pdv', label: 'PDV', icon: '🧾' },
+  { href: '/admin/fiado', label: 'Fiado', icon: '🕒' },
   { href: '/admin/clientes', label: 'Clientes', icon: '👥' },
   { href: '/admin/estoque', label: 'Estoque', icon: '≋' },
 ];

@@ -65,7 +65,13 @@ export async function middleware(request: NextRequest) {
     const isSeller = !au && Boolean(sp && (sp as any).active && (sp as any).role === 'seller');
     if (isSeller) {
       const p = request.nextUrl.pathname;
-      const allowedPrefixes = ['/admin/pdv', '/admin/clientes', '/admin/estoque', '/admin/not-authorized'];
+      const allowedPrefixes = [
+        '/admin/pdv',
+        '/admin/clientes',
+        '/admin/estoque',
+        '/admin/fiado',
+        '/admin/not-authorized',
+      ];
       const ok = allowedPrefixes.some((pref) => p === pref || p.startsWith(pref + '/'));
       if (!ok) {
         const url = new URL('/admin/pdv', request.url);
