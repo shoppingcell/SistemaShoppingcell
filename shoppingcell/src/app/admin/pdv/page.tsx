@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { createSupabaseServerClient } from '@/lib/supabaseServer';
 import { PageHeader } from '@/app/admin/_components/ui/PageHeader';
 import { PdvClient } from './pdvClient';
@@ -30,6 +32,14 @@ export default async function PdvPage() {
         kicker="PDV"
         title="PDV (Balcão)"
         subtitle="Venda rápida com baixa de estoque. PIX, Dinheiro e Fiado."
+        actions={
+          <Link
+            href="/admin/pdv/vendas"
+            className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-extrabold text-white hover:bg-white/10"
+          >
+            Ver vendas
+          </Link>
+        }
       />
       <PdvClient products={rows as any} />
     </div>
