@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { PageHeader } from '@/app/admin/_components/ui/PageHeader';
+import { SyncSheetsClient } from './SyncSheetsClient';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,13 +16,18 @@ export default async function GoogleIntegracaoPage({
 
   return (
     <div className="max-w-3xl">
-      <h1 className="text-2xl font-extrabold">Integração: Google Sheets</h1>
-      <p className="mt-1 text-sm text-slate-400">Conectar para permitir atualizar estoque na planilha automaticamente.</p>
+      <PageHeader
+        kicker="Integrações"
+        title="Google Sheets"
+        subtitle="Conectar para permitir atualizar estoque na planilha automaticamente."
+        backHref="/admin"
+      />
 
       <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-950 p-5">
-        <div className="text-sm font-semibold">Passo 1: conectar</div>
+        <div className="text-sm font-semibold">Passo 1: conectar (opcional)</div>
         <p className="mt-2 text-sm text-slate-300">
-          Clique em “Conectar” e autorize o acesso à sua planilha. Depois copie o <code>refresh_token</code> e cole no servidor.
+          Se você quiser que o sistema escreva de volta na planilha usando OAuth, clique em “Conectar”. Para
+          entregar rápido, você pode usar apenas a sync manual do passo 2.
         </p>
 
         <div className="mt-4 flex gap-3">
@@ -44,6 +51,10 @@ export default async function GoogleIntegracaoPage({
             )}
           </div>
         )}
+      </div>
+
+      <div className="mt-6">
+        <SyncSheetsClient />
       </div>
 
       <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-950 p-5 text-sm text-slate-300">

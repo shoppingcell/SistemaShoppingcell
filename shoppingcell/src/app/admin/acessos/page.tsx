@@ -58,7 +58,7 @@ export default async function AcessosPage() {
   if (!isOwner) {
     return (
       <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
-        <PageHeader title="Acessos" subtitle="Gerencie quem entra no painel admin" />
+        <PageHeader title="Acessos" subtitle="Gerencie quem entra no painel admin" backHref="/admin" />
         <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
           Somente o <span className="font-semibold">owner</span> consegue gerenciar acessos.
         </div>
@@ -68,7 +68,11 @@ export default async function AcessosPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Acessos" subtitle="Somente admin_users entram no /admin (owner gerencia)" />
+      <PageHeader
+        title="Acessos"
+        subtitle="Somente admin_users entram no /admin (owner gerencia)"
+        backHref="/admin"
+      />
 
       <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
         <div className="text-sm font-extrabold">Adicionar admin</div>
