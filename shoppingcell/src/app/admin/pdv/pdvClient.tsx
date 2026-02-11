@@ -35,6 +35,8 @@ export function PdvClient({ products }: { products: ProductRow[] }) {
   const [payment, setPayment] = useState<'pix' | 'dinheiro' | 'fiado'>('pix');
   const [discountTotal, setDiscountTotal] = useState('0');
 
+  const [cashReceived, setCashReceived] = useState('');
+
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
 
@@ -68,6 +70,17 @@ export function PdvClient({ products }: { products: ProductRow[] }) {
 
   const discT = Number((discountTotal || '0').replace(',', '.')) || 0;
   const total = Math.max(0, itemsTotal - discT);
+
+  const received =
+    payment === 'dinheiro'
+      ? cashReceived.trim()
+        ? Number(cashReceived.replace(',', '.')) || 0
+        : total
+      : payment === 'pix'
+        ? total
+        : 0;
+
+  const change = payment === 'dinheiro' ? Math.max(0, received - total) : 0;
 
   function add(p: ProductRow) {
     setError(null);
@@ -123,7 +136,8 @@ export function PdvClient({ products }: { products: ProductRow[] }) {
         p_customer: customer,
         p_discount_total: discT,
         p_due_date: null,
-        p_paid_amount: payment === 'fiado' ? 0 : total,
+        // For dinheiro: send received amount (server calculates change)
+        p_paid_amount: payment === 'dinheiro' ? received : payment === 'fiado' ? 0 : total,
       } as any);
 
       if (error) throw error;
@@ -133,6 +147,7 @@ export function PdvClient({ products }: { products: ProductRow[] }) {
       setDiscountTotal('0');
       setCustomerName('');
       setCustomerPhone('');
+      setCashReceived('');
       setQ('');
     } catch (e: any) {
       setError(e?.message || 'Falha ao finalizar.');
@@ -277,6 +292,20 @@ export function PdvClient({ products }: { products: ProductRow[] }) {
               <span className="text-slate-200">TOTAL</span>
               <span className="text-xl font-extrabold text-yellow-400">{money(total)}</span>
             </div>
+
+            {payment === 'dinheiro' ? (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">Recebido</span>
+                <span className="font-extrabold text-slate-100">{money(received)}</span>
+              </div>
+            ) : null}
+
+            {payment === 'dinheiro' ? (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">Troco</span>
+                <span className="font-extrabold text-slate-100">{money(change)}</span>
+              </div>
+            ) : null}
           </div>
 
           <div className="mt-5 grid gap-3">
@@ -315,6 +344,22 @@ export function PdvClient({ products }: { products: ProductRow[] }) {
                 Fiado
               </button>
             </div>
+
+            {payment === 'dinheiro' && (
+              <div className="grid gap-2 rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="text-sm font-extrabold text-slate-100">Dinheiro</div>
+                <Input
+                  value={cashReceived}
+                  onChange={(e) => setCashReceived(e.target.value)}
+                  placeholder={String(total)}
+                />
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-400">Troco</span>
+                  <span className="font-extrabold text-slate-100">{money(change)}</span>
+                </div>
+                <div className="text-xs text-slate-400">Se não preencher, assume o valor total.</div>
+              </div>
+            )}
 
             {payment === 'fiado' && (
               <div className="grid gap-2 rounded-2xl border border-white/10 bg-white/5 p-4">
