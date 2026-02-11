@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabaseBrowser as supabase } from '@/lib/supabaseBrowser';
+import { PageHeader } from '@/app/admin/_components/ui/PageHeader';
 import { slugify } from '@/lib/slugify';
 
 type Category = {
@@ -79,7 +80,7 @@ export default function EditarCategoriaPage() {
 
   return (
     <div className="max-w-xl">
-      <h1 className="text-2xl font-extrabold">Editar categoria</h1>
+      <PageHeader kicker="Categorias" title="Editar categoria" backHref="/admin/categorias" />
 
       <form onSubmit={onSave} className="mt-6 grid gap-4 rounded-xl border border-slate-800 bg-slate-950 p-6">
         <label className="text-sm text-slate-200">

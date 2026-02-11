@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabaseBrowser as supabase } from '@/lib/supabaseBrowser';
+import { PageHeader } from '@/app/admin/_components/ui/PageHeader';
 
 type Media = {
   id: string;
@@ -180,11 +181,17 @@ export default function MidiaProdutoPage() {
 
   return (
     <div className="max-w-3xl">
-      <h1 className="text-2xl font-extrabold">Mídia do produto</h1>
-      <p className="mt-1 text-sm text-slate-300">
-        Agora você pode adicionar por URL ou enviar uma imagem do seu celular/PC (upload para o bucket{' '}
-        <span className="font-mono">{MEDIA_BUCKET}</span>).
-      </p>
+      <PageHeader
+        kicker="Produtos"
+        title="Mídia do produto"
+        subtitle={
+          <>
+            Adicione por URL ou envie imagem do celular/PC (upload para o bucket{' '}
+            <span className="font-mono">{MEDIA_BUCKET}</span>).
+          </>
+        }
+        backHref={`/admin/produtos/${productId}`}
+      />
 
       <div className="mt-6 grid gap-4">
         <form onSubmit={onAddUrl} className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950 p-6">

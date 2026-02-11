@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabaseBrowser as supabase } from '@/lib/supabaseBrowser';
+import { PageHeader } from '@/app/admin/_components/ui/PageHeader';
 
 type InventoryRow = { product_id: string; quantity: number; min_quantity?: number };
 
@@ -127,8 +128,12 @@ export default function EstoqueProdutoPage() {
 
   return (
     <div className="max-w-3xl">
-      <h1 className="text-2xl font-extrabold">Estoque</h1>
-      <p className="mt-1 text-sm text-slate-300">Controle simples de quantidade e movimentações.</p>
+      <PageHeader
+        kicker="Produtos"
+        title="Estoque"
+        subtitle="Controle simples de quantidade e movimentações."
+        backHref={`/admin/produtos/${productId}`}
+      />
 
       <div className="mt-6 rounded-xl border border-slate-800 bg-slate-950 p-6">
         <div className="text-sm text-slate-300">Quantidade atual</div>
