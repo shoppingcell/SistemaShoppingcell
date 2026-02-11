@@ -19,6 +19,7 @@ const nav: NavItem[] = [
   { href: '/admin/financeiro', label: 'Financeiro', icon: '$' },
   { href: '/admin/clientes', label: 'Clientes', icon: '👥' },
   { href: '/admin/rh', label: 'RH', icon: '⌂' },
+  { href: '/admin/acessos', label: 'Acessos', icon: '🔒' },
   { href: '/admin/integracoes/google', label: 'Google Sheets', icon: '⧉' },
 ];
 
