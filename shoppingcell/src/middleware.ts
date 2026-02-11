@@ -42,7 +42,7 @@ export async function middleware(request: NextRequest) {
 
     const [{ data: au, error: auErr }, { data: sp, error: spErr }] = await Promise.all([
       supabase.from('admin_users').select('user_id').eq('user_id', user.id).maybeSingle(),
-      supabase.from('staff_profiles').select('user_id,active').eq('user_id', user.id).maybeSingle(),
+      supabase.from('staff_profiles').select('user_id,role,active').eq('user_id', user.id).maybeSingle(),
     ]);
 
     // If admin_users is empty, allow bootstrap (first logged user becomes owner in /admin layout)
@@ -59,6 +59,18 @@ export async function middleware(request: NextRequest) {
     if (auErr || spErr || !allowed) {
       const url = new URL('/admin/not-authorized', request.url);
       return NextResponse.redirect(url);
+    }
+
+    // Seller restriction: keep PDV flow safe (seller should not access admin-only pages).
+    const isSeller = !au && Boolean(sp && (sp as any).active && (sp as any).role === 'seller');
+    if (isSeller) {
+      const p = request.nextUrl.pathname;
+      const allowedPrefixes = ['/admin/pdv', '/admin/clientes', '/admin/estoque', '/admin/not-authorized'];
+      const ok = allowedPrefixes.some((pref) => p === pref || p.startsWith(pref + '/'));
+      if (!ok) {
+        const url = new URL('/admin/pdv', request.url);
+        return NextResponse.redirect(url);
+      }
     }
   }
 

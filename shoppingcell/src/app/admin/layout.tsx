@@ -49,5 +49,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     redirect('/admin/not-authorized');
   }
 
-  return <AdminShellClient userEmail={user.email}>{children}</AdminShellClient>;
+  const effectiveRole = (au ? 'admin' : ((sp2 as any)?.role ?? 'seller')) as 'admin' | 'seller';
+
+  return (
+    <AdminShellClient userEmail={user.email} role={effectiveRole}>
+      {children}
+    </AdminShellClient>
+  );
 }

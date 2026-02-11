@@ -10,7 +10,9 @@ type NavItem = {
   icon: string;
 };
 
-const nav: NavItem[] = [
+type Role = 'admin' | 'seller';
+
+const navAdmin: NavItem[] = [
   { href: '/admin', label: 'Dashboard', icon: '▦' },
   { href: '/admin/produtos', label: 'Produtos', icon: '▣' },
   { href: '/admin/categorias', label: 'Categorias', icon: '⌁' },
@@ -24,6 +26,12 @@ const nav: NavItem[] = [
   { href: '/admin/integracoes/google', label: 'Google Sheets', icon: '⧉' },
 ];
 
+const navSeller: NavItem[] = [
+  { href: '/admin/pdv', label: 'PDV', icon: '🧾' },
+  { href: '/admin/clientes', label: 'Clientes', icon: '👥' },
+  { href: '/admin/estoque', label: 'Estoque', icon: '≋' },
+];
+
 function isActive(pathname: string, href: string) {
   if (href === '/admin') return pathname === '/admin';
   return pathname.startsWith(href);
@@ -32,16 +40,19 @@ function isActive(pathname: string, href: string) {
 export default function AdminShellClient({
   children,
   userEmail,
+  role = 'admin',
 }: {
   children: React.ReactNode;
   userEmail?: string | null;
+  role?: Role;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
   const items = useMemo(() => {
+    const nav = role === 'seller' ? navSeller : navAdmin;
     return nav.map((i) => ({ ...i, active: isActive(pathname, i.href) }));
-  }, [pathname]);
+  }, [pathname, role]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
