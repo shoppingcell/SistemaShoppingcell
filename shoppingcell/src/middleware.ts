@@ -35,14 +35,17 @@ export async function middleware(request: NextRequest) {
   }
 
   if (isAdminRoute && user) {
-    // RBAC: only users present in public.admin_users can access /admin
-    const { data: au, error: auErr } = await supabase
-      .from('admin_users')
-      .select('user_id')
-      .eq('user_id', user.id)
-      .maybeSingle();
+    // Access to /admin:
+    // - allowed for admin_users (owner/manager/staff)
+    // - allowed for active staff_profiles (seller/admin)
+    // This enables the seller to use PDV inside /admin.
 
-    // If admin_users is empty, allow bootstrap (first user will be created as owner in /admin layout)
+    const [{ data: au, error: auErr }, { data: sp, error: spErr }] = await Promise.all([
+      supabase.from('admin_users').select('user_id').eq('user_id', user.id).maybeSingle(),
+      supabase.from('staff_profiles').select('user_id,active').eq('user_id', user.id).maybeSingle(),
+    ]);
+
+    // If admin_users is empty, allow bootstrap (first logged user becomes owner in /admin layout)
     const { count: adminCount } = await supabase
       .from('admin_users')
       .select('user_id', { head: true, count: 'exact' });
@@ -51,7 +54,9 @@ export async function middleware(request: NextRequest) {
       return response;
     }
 
-    if (auErr || !au) {
+    const allowed = Boolean(au) || Boolean(sp && (sp as any).active);
+
+    if (auErr || spErr || !allowed) {
       const url = new URL('/admin/not-authorized', request.url);
       return NextResponse.redirect(url);
     }

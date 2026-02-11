@@ -20,13 +20,32 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     await supabase.from('admin_users').insert({ user_id: user.id, role: 'owner' } as any);
   }
 
-  // Check access
+  // admin_users (owner/manager/staff) => full admin
   const { data: au } = await supabase
     .from('admin_users')
     .select('user_id,role')
     .eq('user_id', user.id)
     .maybeSingle();
-  if (!au) {
+
+  // staff_profiles (seller/admin) => can access /admin (PDV), with limited UI
+  const { data: sp } = await supabase
+    .from('staff_profiles')
+    .select('user_id,role,active')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  // Auto-create staff profile for admin users (one-time bootstrap)
+  if (au && !sp) {
+    await supabase.from('staff_profiles').insert({ user_id: user.id, role: 'admin', active: true } as any);
+  }
+
+  const { data: sp2 } = await supabase
+    .from('staff_profiles')
+    .select('user_id,role,active')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (!au && !(sp2 && (sp2 as any).active)) {
     redirect('/admin/not-authorized');
   }
 
