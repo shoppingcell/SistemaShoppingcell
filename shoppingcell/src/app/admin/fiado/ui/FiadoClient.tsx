@@ -200,35 +200,83 @@ export function FiadoClient({ rows }: { rows: Row[] }) {
       </div>
 
       <Modal open={!!detailsId} title="Histórico" onClose={() => setDetailsId(null)}>
-        <div className="grid gap-3">
-          <div className="text-xs text-slate-400">Últimos recebimentos deste fiado.</div>
+        {(() => {
+          const row = rows.find((x) => x.id === detailsId) || null;
+          const total = Number(row?.total || 0);
+          const paid = Number(row?.paid || 0);
+          const remaining = Math.max(0, total - paid);
 
-          {loadingPayments ? (
-            <div className="text-sm text-slate-300">Carregando…</div>
-          ) : payments && payments.length > 0 ? (
-            <div className="grid gap-2">
-              {payments.map((p) => (
-                <div key={p.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-extrabold text-slate-100">
-                      {money(Number(p.amount || 0))}
-                    </div>
-                    <div className="text-xs text-slate-400">
-                      {new Date(p.paid_at).toLocaleString('pt-BR')}
-                    </div>
-                  </div>
-                  {p.note ? <div className="mt-1 text-xs text-slate-300">{p.note}</div> : null}
+          return (
+            <div className="grid gap-3">
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="text-sm font-extrabold text-slate-100">{row?.customer?.name || '—'}</div>
+                <div className="mt-1 text-xs text-slate-400">
+                  {row?.customer?.is_walkin ? 'Balcão' : 'Cadastrado'}
+                  {row?.customer?.phone ? ` • ${row.customer.phone}` : ''}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-              Nenhum pagamento registrado ainda.
-            </div>
-          )}
 
-          {error && <div className="text-sm text-red-200">{error}</div>}
-        </div>
+                <div className="mt-3 grid gap-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-400">Total</span>
+                    <span className="font-extrabold text-slate-100">{money(total)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-400">Pago</span>
+                    <span className="font-extrabold text-slate-100">{money(paid)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-400">Restante</span>
+                    <span className="font-extrabold text-yellow-300">{money(remaining)}</span>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Button
+                    variant="ghost"
+                    disabled={remaining <= 0}
+                    onClick={() => {
+                      if (!row) return;
+                      setError(null);
+                      setAmount(String(remaining.toFixed(2)));
+                      setNote('');
+                      setModal({ id: row.id, remaining, customerName: row.customer?.name ?? null });
+                    }}
+                  >
+                    Receber agora
+                  </Button>
+                </div>
+              </div>
+
+              <div className="text-xs text-slate-400">Últimos recebimentos deste fiado.</div>
+
+              {loadingPayments ? (
+                <div className="text-sm text-slate-300">Carregando…</div>
+              ) : payments && payments.length > 0 ? (
+                <div className="grid gap-2">
+                  {payments.map((p) => (
+                    <div key={p.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-extrabold text-slate-100">
+                          {money(Number(p.amount || 0))}
+                        </div>
+                        <div className="text-xs text-slate-400">
+                          {new Date(p.paid_at).toLocaleString('pt-BR')}
+                        </div>
+                      </div>
+                      {p.note ? <div className="mt-1 text-xs text-slate-300">{p.note}</div> : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+                  Nenhum pagamento registrado ainda.
+                </div>
+              )}
+
+              {error && <div className="text-sm text-red-200">{error}</div>}
+            </div>
+          );
+        })()}
       </Modal>
 
       <Modal open={!!modal} title="Receber fiado" onClose={() => setModal(null)}>
