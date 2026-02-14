@@ -26,15 +26,17 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isAdminRoute = request.nextUrl.pathname.startsWith('/admin');
+  const p = request.nextUrl.pathname;
+  const isAdminRoute = p.startsWith('/admin');
+  const isAdminApiRoute = p.startsWith('/api/admin');
 
-  if (isAdminRoute && !user) {
+  if ((isAdminRoute || isAdminApiRoute) && !user) {
     const url = new URL('/login', request.url);
     url.searchParams.set('next', request.nextUrl.pathname);
     return NextResponse.redirect(url);
   }
 
-  if (isAdminRoute && user) {
+  if ((isAdminRoute || isAdminApiRoute) && user) {
     // Access to /admin:
     // - allowed for admin_users (owner/manager/staff)
     // - allowed for active staff_profiles (seller/admin)
@@ -86,5 +88,5 @@ export async function middleware(request: NextRequest) {
 export const config = {
   // Run on all routes to keep Supabase session cookies fresh (prevents intermittent logouts).
   // Ignore Next static assets.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'],
+  matcher: ['/admin/:path*', '/api/admin/:path*'],
 };

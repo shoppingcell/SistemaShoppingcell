@@ -18,7 +18,12 @@ function parseBRL(v: string): number | null {
 }
 
 function parseIntSafe(v: string): number {
-  const n = Number((v || '').toString().trim().replace(/[^0-9\-]/g, ''));
+  const n = Number(
+    (v || '')
+      .toString()
+      .trim()
+      .replace(/[^0-9\-]/g, ''),
+  );
   return Number.isFinite(n) ? n : 0;
 }
 
@@ -28,21 +33,58 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-export async function POST() {
-  const supabaseAuth = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabaseAuth.auth.getUser();
+export async function POST(req: Request) {
+  // Allow a lightweight server-side cron without interactive auth
+  const cronToken = process.env.GOOGLE_SHEETS_SYNC_TOKEN;
+  const authHeader = req.headers.get('authorization') || '';
+  const bearer = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : '';
+  const cronAllowed = !!cronToken && bearer && bearer === cronToken;
 
-  if (!user) {
-    return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  if (!cronAllowed) {
+    const { requireAdminOrActiveStaff } = await import('@/lib/requireAdmin');
+    const gate = await requireAdminOrActiveStaff();
+    if (!gate.ok) {
+      return NextResponse.json({ ok: false, error: gate.error }, { status: gate.status });
+    }
   }
 
   const sheetCsvUrl =
     process.env.GOOGLE_SHEETS_CSV_URL ||
     'https://docs.google.com/spreadsheets/d/16Kz_lWC2JlyG6kiv7qVr8fpBKyXbwKbxrQCjH7OVTIs/gviz/tq?tqx=out:csv';
 
-  const res = await fetch(sheetCsvUrl, { cache: 'no-store' });
+  async function fetchCsv(url: string) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 20000);
+    try {
+      return await fetch(url, {
+        cache: 'no-store',
+        redirect: 'follow',
+        headers: {
+          // Google sometimes blocks "generic" fetchers; a simple UA helps
+          'user-agent': 'Mozilla/5.0 (compatible; ShoppingCellSync/1.0)',
+          accept: 'text/csv,text/plain,*/*',
+        },
+        signal: ctrl.signal,
+      });
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
+  let res: Response;
+  try {
+    res = await fetchCsv(sheetCsvUrl);
+  } catch {
+    // fallback: export?format=csv
+    const m = sheetCsvUrl.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (m?.[1]) {
+      const fallbackUrl = `https://docs.google.com/spreadsheets/d/${m[1]}/export?format=csv`;
+      res = await fetchCsv(fallbackUrl);
+    } else {
+      return NextResponse.json({ ok: false, error: 'failed_to_fetch_sheet:fetch_failed' }, { status: 500 });
+    }
+  }
+
   if (!res.ok) {
     return NextResponse.json({ ok: false, error: `failed_to_fetch_sheet:${res.status}` }, { status: 500 });
   }
@@ -73,6 +115,13 @@ export async function POST() {
 
   const service = createSupabaseServiceClient();
 
+  // Debug helper: when troubleshooting, set ?debug=1 to see where it fails.
+  const debug = new URL(req.url).searchParams.get('debug') === '1';
+  const debugLog: any[] = [];
+  const d = (obj: any) => {
+    if (debug) debugLog.push(obj);
+  };
+
   // 1) Categories
   const catNames = new Set<string>();
   for (const r of rows.slice(1)) {
@@ -84,11 +133,16 @@ export async function POST() {
 
   if (categoriesPayload.length) {
     const { error } = await service.from('categories').upsert(categoriesPayload, { onConflict: 'slug' });
-    if (error) return NextResponse.json({ ok: false, step: 'upsert_categories', error: error.message }, { status: 500 });
+    if (error)
+      return NextResponse.json(
+        { ok: false, step: 'upsert_categories', error: error.message },
+        { status: 500 },
+      );
   }
 
   const { data: categories, error: catErr } = await service.from('categories').select('id,slug');
-  if (catErr) return NextResponse.json({ ok: false, step: 'read_categories', error: catErr.message }, { status: 500 });
+  if (catErr)
+    return NextResponse.json({ ok: false, step: 'read_categories', error: catErr.message }, { status: 500 });
   const catIdBySlug = new Map((categories ?? []).map((c) => [c.slug, c.id]));
 
   // Build desired rows from sheet
@@ -104,7 +158,7 @@ export async function POST() {
       code,
       name: desc || `Produto ${code}`,
       slug,
-      category_id: cat ? catIdBySlug.get(slugify(cat)) ?? null : null,
+      category_id: cat ? (catIdBySlug.get(slugify(cat)) ?? null) : null,
       price: parseBRL(r[iVenda]),
       cost_price: iCusto !== -1 ? parseBRL(r[iCusto]) : null,
       quantity: parseIntSafe(r[iEstoque]),
@@ -116,13 +170,24 @@ export async function POST() {
   });
 
   // 2) Products: read existing locks
-  const slugs = sheetProducts.map((p) => p.slug);
+  // NOTE: avoid huge `.in('slug', [...])` URLs (can break fetch). Read all and map locally.
+  d({ step: 'read_existing_products:begin' });
   const { data: existingProducts, error: exErr } = await service
     .from('products')
-    .select('id,slug,price_locked,cost_locked')
-    .in('slug', slugs);
+    .select('id,slug,price_locked,cost_locked');
 
-  if (exErr) return NextResponse.json({ ok: false, step: 'read_existing_products', error: exErr.message }, { status: 500 });
+  if (exErr) {
+    return NextResponse.json(
+      {
+        ok: false,
+        step: 'read_existing_products',
+        error: exErr.message,
+        debug: debug ? debugLog : undefined,
+      },
+      { status: 500 },
+    );
+  }
+  d({ step: 'read_existing_products:ok', count: (existingProducts ?? []).length });
 
   const existingBySlug = new Map((existingProducts ?? []).map((p) => [p.slug, p]));
 
@@ -146,7 +211,8 @@ export async function POST() {
 
   if (inserts.length) {
     const { error } = await service.from('products').insert(inserts);
-    if (error) return NextResponse.json({ ok: false, step: 'insert_products', error: error.message }, { status: 500 });
+    if (error)
+      return NextResponse.json({ ok: false, step: 'insert_products', error: error.message }, { status: 500 });
   }
 
   // Updates in batches (respect locks)
@@ -169,27 +235,36 @@ export async function POST() {
 
   for (const batch of chunk(updates, 50)) {
     const results = await Promise.all(
-      batch.map((u) => service.from('products').update(u.patch).eq('id', u.id))
+      batch.map((u) => service.from('products').update(u.patch).eq('id', u.id)),
     );
     const firstErr = results.find((r) => r.error)?.error;
-    if (firstErr) return NextResponse.json({ ok: false, step: 'update_products', error: firstErr.message }, { status: 500 });
+    if (firstErr)
+      return NextResponse.json(
+        { ok: false, step: 'update_products', error: firstErr.message },
+        { status: 500 },
+      );
   }
 
   // 3) Inventory: map product ids
   const { data: products, error: prodReadErr } = await service.from('products').select('id,slug');
-  if (prodReadErr) return NextResponse.json({ ok: false, step: 'read_products', error: prodReadErr.message }, { status: 500 });
+  if (prodReadErr)
+    return NextResponse.json(
+      { ok: false, step: 'read_products', error: prodReadErr.message },
+      { status: 500 },
+    );
   const productIdBySlug = new Map((products ?? []).map((p) => [p.slug, p.id]));
 
-  const invProductIds = sheetProducts
-    .map((p) => productIdBySlug.get(p.slug))
-    .filter(Boolean) as string[];
+  const invProductIds = sheetProducts.map((p) => productIdBySlug.get(p.slug)).filter(Boolean) as string[];
 
   const { data: existingInv, error: invReadErr } = await service
     .from('inventory')
-    .select('product_id,quantity_locked,min_locked')
-    .in('product_id', invProductIds);
+    .select('product_id,quantity_locked,min_locked');
 
-  if (invReadErr) return NextResponse.json({ ok: false, step: 'read_inventory', error: invReadErr.message }, { status: 500 });
+  if (invReadErr)
+    return NextResponse.json(
+      { ok: false, step: 'read_inventory', error: invReadErr.message },
+      { status: 500 },
+    );
 
   const invLocksByProductId = new Map((existingInv ?? []).map((r) => [r.product_id, r]));
 
@@ -204,8 +279,8 @@ export async function POST() {
     if (!locks) {
       invUpserts.push({
         product_id,
-        quantity: p.quantity,
-        min_quantity: p.min_quantity,
+        quantity: p.quantity ?? 0,
+        min_quantity: p.min_quantity ?? 0,
         updated_at: new Date().toISOString(),
         quantity_locked: false,
         min_locked: false,
@@ -214,14 +289,25 @@ export async function POST() {
     }
 
     const patch: any = { product_id, updated_at: new Date().toISOString() };
-    if (!locks.quantity_locked) patch.quantity = p.quantity;
-    if (!locks.min_locked) patch.min_quantity = p.min_quantity;
+    if (!locks.quantity_locked) patch.quantity = p.quantity ?? 0;
+    if (!locks.min_locked) patch.min_quantity = p.min_quantity ?? 0;
     invUpserts.push(patch);
   }
 
   if (invUpserts.length) {
-    const { error: invErr } = await service.from('inventory').upsert(invUpserts, { onConflict: 'product_id' });
-    if (invErr) return NextResponse.json({ ok: false, step: 'upsert_inventory', error: invErr.message }, { status: 500 });
+    // Ensure NOT NULL fields are always present
+    const sanitized = invUpserts.map((r) => ({
+      ...r,
+      quantity: r.quantity ?? 0,
+      min_quantity: r.min_quantity ?? 0,
+    }));
+
+    const { error: invErr } = await service.from('inventory').upsert(sanitized, { onConflict: 'product_id' });
+    if (invErr)
+      return NextResponse.json(
+        { ok: false, step: 'upsert_inventory', error: invErr.message },
+        { status: 500 },
+      );
   }
 
   return NextResponse.json({
@@ -237,5 +323,6 @@ export async function POST() {
       hasMinStockColumn: iMin !== -1,
       mode: 'admin_can_override_auto_lock',
     },
+    debug: debug ? debugLog : undefined,
   });
 }

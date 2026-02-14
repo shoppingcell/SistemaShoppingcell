@@ -6,7 +6,14 @@ import { supabaseBrowser as supabase } from '@/lib/supabaseBrowser';
 
 export default function LoginClient() {
   const sp = useSearchParams();
-  const nextPath = useMemo(() => sp.get('next') || '/admin', [sp]);
+  const nextPath = useMemo(() => {
+    const raw = sp.get('next') || '/admin';
+    // Prevent open redirect: allow only internal paths.
+    if (!raw.startsWith('/')) return '/admin';
+    if (raw.startsWith('//')) return '/admin';
+    if (raw.toLowerCase().startsWith('/\\')) return '/admin';
+    return raw;
+  }, [sp]);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
