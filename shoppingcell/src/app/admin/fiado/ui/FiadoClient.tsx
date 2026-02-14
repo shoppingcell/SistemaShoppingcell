@@ -61,13 +61,44 @@ export function FiadoClient({ rows }: { rows: Row[] }) {
       });
   }, [rows, q, scope]);
 
+  const summary = useMemo(() => {
+    const out = {
+      count: filtered.length,
+      open: 0,
+      overdue: 0,
+      remainingTotal: 0,
+    };
+
+    for (const r of filtered) {
+      const st = String(r.status || '').toLowerCase();
+      const remaining = Math.max(0, Number(r.total || 0) - Number(r.paid || 0));
+      out.remainingTotal += remaining;
+      if (st === 'overdue') out.overdue += 1;
+      if (st === 'open' || st === 'partial' || st === 'overdue') out.open += 1;
+    }
+
+    return out;
+  }, [filtered]);
+
   return (
     <div>
       <div className="border-b border-white/10 px-6 py-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <div className="text-sm font-semibold text-slate-200">Lista</div>
-            <div className="mt-1 text-xs text-slate-500">{filtered.length} registros</div>
+            <div className="mt-1 text-xs text-slate-500">{summary.count} registros</div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200">
+              Abertos: <span className="font-extrabold">{summary.open}</span>
+            </div>
+            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200">
+              Atrasados: <span className="font-extrabold">{summary.overdue}</span>
+            </div>
+            <div className="rounded-full border border-white/10 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-200">
+              Restante: <span className="font-extrabold">{money(summary.remainingTotal)}</span>
+            </div>
           </div>
 
           <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
@@ -121,7 +152,103 @@ export function FiadoClient({ rows }: { rows: Row[] }) {
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      {/* Mobile: cards */}
+      <div className="grid gap-3 p-4 md:hidden">
+        {filtered.map((r) => {
+          const remaining = Math.max(0, Number(r.total || 0) - Number(r.paid || 0));
+          return (
+            <div key={r.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-extrabold text-slate-100">
+                    {r.customer?.name || '—'}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-400">
+                    {r.customer?.is_walkin ? 'Balcão' : 'Cadastrado'}
+                    {r.customer?.phone ? ` • ${r.customer.phone}` : ''}
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="text-xs text-slate-400">Restante</div>
+                  <div className="text-sm font-extrabold text-yellow-300">{money(remaining)}</div>
+                </div>
+              </div>
+
+              <div className="mt-3 grid gap-2 rounded-xl border border-white/10 bg-black/30 p-3 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Status</span>
+                  <span className="font-extrabold text-slate-200">
+                    {String(r.status || '').toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Venc.</span>
+                  <span className="text-slate-200">
+                    {r.due_date ? new Date(r.due_date).toLocaleDateString('pt-BR') : '—'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Total</span>
+                  <span className="text-slate-200">{money(r.total)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Pago</span>
+                  <span className="text-slate-200">{money(r.paid)}</span>
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  variant="ghost"
+                  onClick={async () => {
+                    setError(null);
+                    setDetailsId(r.id);
+                    setPayments(null);
+                    setLoadingPayments(true);
+                    try {
+                      const { data, error } = await supabase
+                        .from('receivable_payments')
+                        .select('id,receivable_id,amount,paid_at,note')
+                        .eq('receivable_id', r.id)
+                        .order('paid_at', { ascending: false });
+                      if (error) throw error;
+                      setPayments((data as any) ?? []);
+                    } catch (e: any) {
+                      setError(e?.message || 'Falha ao carregar histórico.');
+                      setPayments([]);
+                    } finally {
+                      setLoadingPayments(false);
+                    }
+                  }}
+                >
+                  Histórico
+                </Button>
+                <Button
+                  variant="ghost"
+                  disabled={remaining <= 0}
+                  onClick={() => {
+                    setError(null);
+                    setAmount(String(remaining.toFixed(2)));
+                    setNote('');
+                    setModal({ id: r.id, remaining, customerName: r.customer?.name ?? null });
+                  }}
+                >
+                  Receber
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+
+        {filtered.length === 0 ? (
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+            Nenhum registro.
+          </div>
+        ) : null}
+      </div>
+
+      {/* Desktop: table */}
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full text-sm">
           <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
             <tr className="border-b border-white/10">
