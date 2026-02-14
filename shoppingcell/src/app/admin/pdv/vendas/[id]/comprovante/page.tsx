@@ -59,7 +59,7 @@ export default async function SaleReceiptPage({ params }: { params: Promise<{ id
       {/* Toolbar (hidden on print) */}
       <div className="print:hidden sticky top-0 z-10 border-b border-white/10 bg-neutral-950/90 backdrop-blur">
         <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-2 px-4 py-3">
-          <div className="text-sm font-extrabold">Comprovante</div>
+          <div className="text-sm font-extrabold">Comprovante (80mm)</div>
           <div className="flex items-center gap-2">
             <Link
               href={`/admin/pdv/vendas/${id}`}
@@ -71,13 +71,14 @@ export default async function SaleReceiptPage({ params }: { params: Promise<{ id
               onClick={() => window.print()}
               className="rounded-xl bg-yellow-400 px-3 py-2 text-xs font-extrabold text-slate-950 hover:bg-yellow-300"
             >
-              Imprimir / Salvar PDF
+              Imprimir
             </button>
           </div>
         </div>
       </div>
 
-      <div className="mx-auto max-w-3xl px-4 py-6">
+      {/* Receipt */}
+      <div className="mx-auto w-full max-w-[360px] px-3 py-5 print:p-0">
         {error ? (
           <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-200">
             Erro: {error.message}
@@ -85,116 +86,116 @@ export default async function SaleReceiptPage({ params }: { params: Promise<{ id
         ) : !sale ? (
           <div className="text-sm text-slate-400">Venda não encontrada.</div>
         ) : (
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-6 print:border-none print:bg-transparent print:p-0">
-            {/* Header */}
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-lg font-extrabold">SHOPPINGCELL</div>
-                <div className="mt-1 text-xs text-slate-400">Comprovante de venda</div>
-              </div>
-              <div className="text-right text-xs text-slate-300">
-                <div>Venda: {String(sale.id).slice(0, 8)}</div>
-                <div>Data: {createdAt}</div>
-              </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 font-mono text-[12px] leading-5 print:border-none print:bg-transparent print:text-black">
+            <div className="text-center">
+              <div className="text-[14px] font-extrabold tracking-wide">SHOPPINGCELL</div>
+              <div className="text-[11px] text-slate-400 print:text-black/70">Comprovante de venda</div>
             </div>
 
-            <div className="my-4 h-px bg-white/10" />
+            <div className="my-3 border-t border-dashed border-white/15 print:border-black/40" />
 
-            {/* Customer */}
-            <div className="grid gap-1 text-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-slate-400">Cliente</span>
-                <span className="font-bold">{customer?.name || '—'}</span>
+            <div className="grid gap-1">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-slate-400 print:text-black/70">Venda</span>
+                <span className="font-bold">{String(sale.id).slice(0, 8)}</span>
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-slate-400">WhatsApp</span>
-                <span className="font-bold">{customer?.phone || '—'}</span>
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-slate-400 print:text-black/70">Data</span>
+                <span className="font-bold">{createdAt}</span>
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-slate-400">Vendedor</span>
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-slate-400 print:text-black/70">Vendedor</span>
                 <span className="font-bold">{sellerName}</span>
               </div>
-            </div>
-
-            <div className="my-4 h-px bg-white/10" />
-
-            {/* Items */}
-            <div>
-              <div className="text-sm font-extrabold">Itens</div>
-              <div className="mt-3 grid gap-2">
-                {(items ?? []).map((it: any) => (
-                  <div
-                    key={it.id}
-                    className="rounded-2xl border border-white/10 bg-neutral-950/40 p-4 print:border-none print:bg-transparent print:p-0"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-extrabold">
-                          {it.products?.name ?? it.product_id}
-                        </div>
-                        <div className="mt-1 text-xs text-slate-400">
-                          {it.products?.sheet_code ? `Código: ${it.products.sheet_code} • ` : ''}
-                          {it.quantity}x • {money(it.unit_price)} • desc {money(it.discount)}
-                        </div>
-                      </div>
-                      <div className="shrink-0 text-sm font-extrabold text-yellow-300">{money(it.total)}</div>
-                    </div>
-                  </div>
-                ))}
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-slate-400 print:text-black/70">Cliente</span>
+                <span className="max-w-[210px] text-right font-bold">{customer?.name || '—'}</span>
+              </div>
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-slate-400 print:text-black/70">WhatsApp</span>
+                <span className="font-bold">{customer?.phone || '—'}</span>
               </div>
             </div>
 
-            <div className="my-4 h-px bg-white/10" />
+            <div className="my-3 border-t border-dashed border-white/15 print:border-black/40" />
 
-            {/* Summary */}
-            <div className="grid gap-2 text-sm">
+            <div className="text-[12px] font-extrabold">ITENS</div>
+
+            <div className="mt-2 grid gap-2">
+              {(items ?? []).map((it: any) => (
+                <div key={it.id}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate font-bold">{it.products?.name ?? it.product_id}</div>
+                      <div className="text-[11px] text-slate-400 print:text-black/70">
+                        {it.products?.sheet_code ? `Cód: ${it.products.sheet_code} · ` : ''}
+                        {it.quantity}x {money(it.unit_price)}
+                        {Number(it.discount || 0) > 0 ? ` · desc ${money(it.discount)}` : ''}
+                      </div>
+                    </div>
+                    <div className="shrink-0 font-extrabold">{money(it.total)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="my-3 border-t border-dashed border-white/15 print:border-black/40" />
+
+            <div className="grid gap-1">
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Pagamento</span>
+                <span className="text-slate-400 print:text-black/70">Pagamento</span>
                 <span className="font-bold">{pmLabel(sale.payment_method)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Status</span>
+                <span className="text-slate-400 print:text-black/70">Status</span>
                 <span className="font-bold">{String(sale.status || '').toUpperCase()}</span>
               </div>
 
-              <div className="mt-2 h-px bg-white/10" />
+              <div className="my-2 border-t border-dashed border-white/15 print:border-black/40" />
 
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Subtotal</span>
+                <span className="text-slate-400 print:text-black/70">Subtotal</span>
                 <span>{money(sale.subtotal)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Desconto</span>
+                <span className="text-slate-400 print:text-black/70">Desconto</span>
                 <span>{money(sale.discount_total)}</span>
               </div>
-              <div className="flex items-center justify-between text-base">
+              <div className="flex items-center justify-between text-[13px]">
                 <span className="font-extrabold">TOTAL</span>
-                <span className="font-extrabold text-yellow-300">{money(sale.total)}</span>
+                <span className="font-extrabold">{money(sale.total)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Pago</span>
+                <span className="text-slate-400 print:text-black/70">Pago</span>
                 <span>{money(sale.paid_amount)}</span>
               </div>
 
               {sale.payment_method === 'dinheiro' ? (
                 <>
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Recebido</span>
+                    <span className="text-slate-400 print:text-black/70">Recebido</span>
                     <span>{money((sale as any).received_amount)}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Troco</span>
+                    <span className="text-slate-400 print:text-black/70">Troco</span>
                     <span>{money((sale as any).change_amount)}</span>
                   </div>
                 </>
               ) : null}
             </div>
 
-            <div className="mt-6 text-center text-xs text-slate-500">Obrigado pela preferência.</div>
+            <div className="mt-4 text-center text-[11px] text-slate-400 print:text-black/70">
+              Obrigado pela preferência.
+            </div>
 
             <style>{`
+              @page {
+                size: 80mm auto;
+                margin: 4mm;
+              }
+
               @media print {
-                body { background: white !important; }
+                html, body { background: white !important; }
                 .print\\:hidden { display: none !important; }
               }
             `}</style>
