@@ -8,19 +8,17 @@ export const dynamic = 'force-dynamic';
 export default async function FiadoPage() {
   const supabase = await createSupabaseServerClient();
 
-  const [{ data: receivables, error: rErr }, { data: customers }] = await Promise.all([
-    supabase
-      .from('receivables')
-      .select('id,sale_id,customer_id,total,paid,status,due_date,created_at')
-      .order('created_at', { ascending: false })
-      .limit(200),
-    supabase.from('customers').select('id,name,phone').limit(5000),
-  ]);
+  const { data: receivables, error: rErr } = await supabase
+    .from('receivables')
+    .select(
+      'id,sale_id,customer_id,total,paid,status,due_date,created_at, customer:customers(id,name,phone,is_walkin)',
+    )
+    .order('created_at', { ascending: false })
+    .limit(300);
 
-  const customerById = new Map((customers ?? []).map((c: any) => [c.id, c]));
   const rows = (receivables ?? []).map((r: any) => ({
     ...r,
-    customer: customerById.get(r.customer_id) ?? null,
+    customer: (r as any).customer ?? null,
   }));
 
   return (

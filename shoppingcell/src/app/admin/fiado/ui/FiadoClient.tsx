@@ -15,7 +15,15 @@ type Row = {
   status: string;
   due_date: string | null;
   created_at: string;
-  customer?: { name?: string | null; phone?: string | null } | null;
+  customer?: { name?: string | null; phone?: string | null; is_walkin?: boolean | null } | null;
+};
+
+type PaymentRow = {
+  id: string;
+  receivable_id: string;
+  amount: number;
+  paid_at: string;
+  note: string | null;
 };
 
 function money(n: number) {
@@ -24,7 +32,13 @@ function money(n: number) {
 
 export function FiadoClient({ rows }: { rows: Row[] }) {
   const [q, setQ] = useState('');
-  const [modal, setModal] = useState<null | { id: string; remaining: number }>(null);
+  const [scope, setScope] = useState<'all' | 'balcao' | 'cadastrados'>('all');
+  const [modal, setModal] = useState<null | { id: string; remaining: number; customerName?: string | null }>(
+    null,
+  );
+  const [detailsId, setDetailsId] = useState<string | null>(null);
+  const [payments, setPayments] = useState<PaymentRow[] | null>(null);
+  const [loadingPayments, setLoadingPayments] = useState(false);
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
@@ -32,14 +46,20 @@ export function FiadoClient({ rows }: { rows: Row[] }) {
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
-    if (!term) return rows;
-    return rows.filter((r) => {
-      const name = String(r.customer?.name || '').toLowerCase();
-      const phone = String(r.customer?.phone || '').toLowerCase();
-      const id = String(r.id).toLowerCase();
-      return name.includes(term) || phone.includes(term) || id.includes(term);
-    });
-  }, [rows, q]);
+    return rows
+      .filter((r) => {
+        if (scope === 'balcao') return Boolean(r.customer?.is_walkin);
+        if (scope === 'cadastrados') return !r.customer?.is_walkin;
+        return true;
+      })
+      .filter((r) => {
+        if (!term) return true;
+        const name = String(r.customer?.name || '').toLowerCase();
+        const phone = String(r.customer?.phone || '').toLowerCase();
+        const id = String(r.id).toLowerCase();
+        return name.includes(term) || phone.includes(term) || id.includes(term);
+      });
+  }, [rows, q, scope]);
 
   return (
     <div>
@@ -49,8 +69,54 @@ export function FiadoClient({ rows }: { rows: Row[] }) {
             <div className="text-sm font-semibold text-slate-200">Lista</div>
             <div className="mt-1 text-xs text-slate-500">{filtered.length} registros</div>
           </div>
-          <div className="w-full md:w-80">
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nome/telefone…" />
+
+          <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setScope('all')}
+                className={
+                  'rounded-full px-3 py-2 text-xs font-extrabold ' +
+                  (scope === 'all'
+                    ? 'bg-white/10 text-white'
+                    : 'bg-slate-950 text-slate-300 hover:bg-white/5')
+                }
+              >
+                Todos
+              </button>
+              <button
+                type="button"
+                onClick={() => setScope('cadastrados')}
+                className={
+                  'rounded-full px-3 py-2 text-xs font-extrabold ' +
+                  (scope === 'cadastrados'
+                    ? 'bg-white/10 text-white'
+                    : 'bg-slate-950 text-slate-300 hover:bg-white/5')
+                }
+              >
+                Cadastrados
+              </button>
+              <button
+                type="button"
+                onClick={() => setScope('balcao')}
+                className={
+                  'rounded-full px-3 py-2 text-xs font-extrabold ' +
+                  (scope === 'balcao'
+                    ? 'bg-white/10 text-white'
+                    : 'bg-slate-950 text-slate-300 hover:bg-white/5')
+                }
+              >
+                Balcão
+              </button>
+            </div>
+
+            <div className="w-full md:w-80">
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Buscar por nome/telefone…"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -85,18 +151,46 @@ export function FiadoClient({ rows }: { rows: Row[] }) {
                   <td className="px-6 py-4 text-slate-200">{money(r.paid)}</td>
                   <td className="px-6 py-4 text-slate-200">{money(remaining)}</td>
                   <td className="px-6 py-4">
-                    <Button
-                      variant="ghost"
-                      disabled={remaining <= 0}
-                      onClick={() => {
-                        setError(null);
-                        setAmount(String(remaining.toFixed(2)));
-                        setNote('');
-                        setModal({ id: r.id, remaining });
-                      }}
-                    >
-                      Receber
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="ghost"
+                        onClick={async () => {
+                          setError(null);
+                          setDetailsId(r.id);
+                          setPayments(null);
+                          setLoadingPayments(true);
+                          try {
+                            const { data, error } = await supabase
+                              .from('receivable_payments')
+                              .select('id,receivable_id,amount,paid_at,note')
+                              .eq('receivable_id', r.id)
+                              .order('paid_at', { ascending: false });
+                            if (error) throw error;
+                            setPayments((data as any) ?? []);
+                          } catch (e: any) {
+                            setError(e?.message || 'Falha ao carregar histórico.');
+                            setPayments([]);
+                          } finally {
+                            setLoadingPayments(false);
+                          }
+                        }}
+                      >
+                        Histórico
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        disabled={remaining <= 0}
+                        onClick={() => {
+                          setError(null);
+                          setAmount(String(remaining.toFixed(2)));
+                          setNote('');
+                          setModal({ id: r.id, remaining, customerName: r.customer?.name ?? null });
+                        }}
+                      >
+                        Receber
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -104,6 +198,38 @@ export function FiadoClient({ rows }: { rows: Row[] }) {
           </tbody>
         </table>
       </div>
+
+      <Modal open={!!detailsId} title="Histórico" onClose={() => setDetailsId(null)}>
+        <div className="grid gap-3">
+          <div className="text-xs text-slate-400">Últimos recebimentos deste fiado.</div>
+
+          {loadingPayments ? (
+            <div className="text-sm text-slate-300">Carregando…</div>
+          ) : payments && payments.length > 0 ? (
+            <div className="grid gap-2">
+              {payments.map((p) => (
+                <div key={p.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-extrabold text-slate-100">
+                      {money(Number(p.amount || 0))}
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      {new Date(p.paid_at).toLocaleString('pt-BR')}
+                    </div>
+                  </div>
+                  {p.note ? <div className="mt-1 text-xs text-slate-300">{p.note}</div> : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+              Nenhum pagamento registrado ainda.
+            </div>
+          )}
+
+          {error && <div className="text-sm text-red-200">{error}</div>}
+        </div>
+      </Modal>
 
       <Modal open={!!modal} title="Receber fiado" onClose={() => setModal(null)}>
         <form
