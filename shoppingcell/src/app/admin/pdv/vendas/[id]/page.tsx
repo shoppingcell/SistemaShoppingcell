@@ -45,12 +45,21 @@ export default async function SaleDetailsPage({ params }: { params: Promise<{ id
         subtitle={`ID: ${String(id).slice(0, 8)}`}
         backHref="/admin/pdv/vendas"
         actions={
-          <Link
-            href="/admin/pdv"
-            className="rounded-2xl bg-yellow-400 px-5 py-3 text-sm font-extrabold text-slate-950 hover:bg-yellow-300"
-          >
-            Nova venda
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href={`/admin/pdv/vendas/${id}/comprovante`}
+              target="_blank"
+              className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-extrabold text-slate-100 hover:bg-white/10"
+            >
+              Comprovante
+            </Link>
+            <Link
+              href="/admin/pdv"
+              className="rounded-2xl bg-yellow-400 px-5 py-3 text-sm font-extrabold text-slate-950 hover:bg-yellow-300"
+            >
+              Nova venda
+            </Link>
+          </div>
         }
       />
 
