@@ -33,6 +33,7 @@ function money(n: number | null | undefined) {
 
 type Attendance = {
   id: string;
+  employee_id: string;
   day: string; // yyyy-mm-dd
   status: 'present' | 'absent' | 'note' | string;
   note: string | null;
@@ -63,7 +64,7 @@ export function RhClient({
   const router = useRouter();
   const [tab, setTab] = useState<'dashboard' | 'employees' | 'payments'>('dashboard');
 
-  const [modal, setModal] = useState<null | 'employee' | 'payment' | 'note'>(null);
+  const [modal, setModal] = useState<null | 'employee' | 'payment' | 'attendance'>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,7 +76,18 @@ export function RhClient({
     status: 'active',
   });
   const [paymentForm, setPaymentForm] = useState({ employeeId: '', description: '', amount: '', paidAt: '' });
-  const [noteForm, setNoteForm] = useState({ day: isoDate(new Date()), note: '' });
+  const [monthCursor, setMonthCursor] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
+
+  const [attendanceForm, setAttendanceForm] = useState({
+    day: isoDate(new Date()),
+    status: 'present' as 'present' | 'absent' | 'note',
+    note: '',
+  });
 
   const activeEmployees = useMemo(() => employees.filter((e) => e.status === 'active').length, [employees]);
 
@@ -93,12 +105,16 @@ export function RhClient({
 
   const attendanceByDay = useMemo(() => {
     const m = new Map<string, Attendance>();
-    for (const a of attendance) m.set(a.day, a);
+    for (const a of attendance) {
+      if (!selectedEmployeeId) continue;
+      if (a.employee_id !== selectedEmployeeId) continue;
+      m.set(a.day, a);
+    }
     return m;
-  }, [attendance]);
+  }, [attendance, selectedEmployeeId]);
 
   const calendar = useMemo(() => {
-    const base = new Date();
+    const base = monthCursor;
     const monthStart = new Date(base.getFullYear(), base.getMonth(), 1);
     const startWeekday = monthStart.getDay();
     const firstCell = addDays(monthStart, -startWeekday);
@@ -186,19 +202,28 @@ export function RhClient({
     setSaving(false);
   }
 
-  async function setAttendanceStatus(status: 'present' | 'absent') {
+  async function upsertAttendance(args: {
+    employeeId: string;
+    day: string;
+    status: 'present' | 'absent' | 'note';
+    note?: string | null;
+  }) {
+    if (!args.employeeId) {
+      setError('Selecione um funcionário.');
+      return;
+    }
+
     setSaving(true);
     setError(null);
 
-    const day = isoDate(new Date());
-
     const { error } = await supabase.from('hr_attendance').upsert(
       {
-        day,
-        status,
-        note: null,
+        employee_id: args.employeeId,
+        day: args.day,
+        status: args.status,
+        note: args.note ?? null,
       },
-      { onConflict: 'day' },
+      { onConflict: 'employee_id,day' },
     );
 
     if (error) {
@@ -211,30 +236,20 @@ export function RhClient({
     setSaving(false);
   }
 
-  async function setAttendanceNote() {
-    if (!noteForm.day.trim()) return;
-    setSaving(true);
-    setError(null);
+  async function markToday(status: 'present' | 'absent') {
+    const day = isoDate(new Date());
+    await upsertAttendance({ employeeId: selectedEmployeeId, day, status, note: null });
+  }
 
-    const { error } = await supabase.from('hr_attendance').upsert(
-      {
-        day: noteForm.day,
-        status: 'note',
-        note: noteForm.note.trim() || null,
-      },
-      { onConflict: 'day' },
-    );
-
-    if (error) {
-      setError(error.message);
-      setSaving(false);
-      return;
-    }
-
+  async function saveAttendanceForm() {
+    await upsertAttendance({
+      employeeId: selectedEmployeeId,
+      day: attendanceForm.day,
+      status: attendanceForm.status,
+      note: attendanceForm.note.trim() || null,
+    });
     setModal(null);
-    setNoteForm({ day: isoDate(new Date()), note: '' });
-    router.refresh();
-    setSaving(false);
+    setAttendanceForm({ day: isoDate(new Date()), status: 'present', note: '' });
   }
 
   return (
@@ -355,23 +370,48 @@ export function RhClient({
         </form>
       </Modal>
 
-      <Modal open={modal === 'note'} title="Observação" onClose={() => setModal(null)}>
+      <Modal open={modal === 'attendance'} title="Editar dia" onClose={() => setModal(null)}>
         <form
           className="grid gap-3"
           onSubmit={(e) => {
             e.preventDefault();
-            void setAttendanceNote();
+            void saveAttendanceForm();
           }}
         >
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Funcionário</label>
+          <Select value={selectedEmployeeId} onChange={(e) => setSelectedEmployeeId(e.target.value)}>
+            <option value="">Selecione…</option>
+            {employees.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name}
+              </option>
+            ))}
+          </Select>
+
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Dia</label>
           <Input
             type="date"
-            value={noteForm.day}
-            onChange={(e) => setNoteForm({ ...noteForm, day: e.target.value })}
+            value={attendanceForm.day}
+            onChange={(e) => setAttendanceForm({ ...attendanceForm, day: e.target.value })}
           />
 
-          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nota</label>
-          <Input value={noteForm.note} onChange={(e) => setNoteForm({ ...noteForm, note: e.target.value })} />
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</label>
+          <Select
+            value={attendanceForm.status}
+            onChange={(e) => setAttendanceForm({ ...attendanceForm, status: e.target.value as any })}
+          >
+            <option value="present">Presente</option>
+            <option value="absent">Falta</option>
+            <option value="note">Observação</option>
+          </Select>
+
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Nota (opcional)
+          </label>
+          <Input
+            value={attendanceForm.note}
+            onChange={(e) => setAttendanceForm({ ...attendanceForm, note: e.target.value })}
+          />
 
           {error && <div className="text-sm text-red-200">{error}</div>}
           <Button disabled={saving} type="submit">
@@ -434,8 +474,44 @@ export function RhClient({
           <div className="grid gap-4 lg:grid-cols-2">
             <Panel>
               <div className="border-b border-white/10 px-6 py-5">
-                <div className="text-sm font-semibold text-slate-200">Presenças / Observações</div>
-                <div className="mt-1 text-xs text-slate-500 capitalize">{calendar.monthLabel}</div>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-200">Presenças / Observações</div>
+                    <div className="mt-1 text-xs text-slate-500 capitalize">{calendar.monthLabel}</div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Select
+                      value={selectedEmployeeId}
+                      onChange={(e) => setSelectedEmployeeId(e.target.value)}
+                      className="min-w-[220px]"
+                    >
+                      <option value="">Selecione funcionário…</option>
+                      {employees.map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.name}
+                        </option>
+                      ))}
+                    </Select>
+
+                    <button
+                      onClick={() =>
+                        setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth() - 1, 1))
+                      }
+                      className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-white/10"
+                    >
+                      ‹
+                    </button>
+                    <button
+                      onClick={() =>
+                        setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 1))
+                      }
+                      className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-white/10"
+                    >
+                      ›
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div className="px-6 py-5">
@@ -473,13 +549,30 @@ export function RhClient({
                             : null;
 
                     return (
-                      <div
+                      <button
+                        type="button"
                         key={c.date}
                         title={
                           c.note ? `${c.date} — ${c.note}` : c.status ? `${c.date} — ${c.status}` : c.date
                         }
+                        onClick={() => {
+                          if (!selectedEmployeeId) {
+                            setError('Selecione um funcionário para editar presenças.');
+                            return;
+                          }
+                          setAttendanceForm({
+                            day: c.date,
+                            status: (c.status === 'absent'
+                              ? 'absent'
+                              : c.status === 'note'
+                                ? 'note'
+                                : 'present') as any,
+                            note: c.note || '',
+                          });
+                          setModal('attendance');
+                        }}
                         className={
-                          'rounded-xl border p-2 ' +
+                          'rounded-xl border p-2 text-left transition-colors hover:bg-white/10 ' +
                           (c.inMonth
                             ? 'border-white/10 bg-white/5'
                             : 'border-white/5 bg-slate-950 text-slate-600')
@@ -492,7 +585,7 @@ export function RhClient({
                         {c.note && (
                           <div className="mt-1 line-clamp-2 text-[10px] text-slate-400">{c.note}</div>
                         )}
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -504,21 +597,28 @@ export function RhClient({
                   <div className="flex flex-wrap gap-2">
                     <button
                       disabled={saving}
-                      onClick={() => void setAttendanceStatus('present')}
+                      onClick={() => void markToday('present')}
                       className="rounded-full bg-green-500/15 px-4 py-2 text-xs font-semibold text-green-300 hover:bg-green-500/20 disabled:opacity-60"
                     >
                       Marcar Presença (Hoje)
                     </button>
                     <button
                       disabled={saving}
-                      onClick={() => void setAttendanceStatus('absent')}
+                      onClick={() => void markToday('absent')}
                       className="rounded-full bg-red-500/15 px-4 py-2 text-xs font-semibold text-red-200 hover:bg-red-500/20 disabled:opacity-60"
                     >
                       Marcar Falta (Hoje)
                     </button>
                     <button
                       disabled={saving}
-                      onClick={() => setModal('note')}
+                      onClick={() => {
+                        if (!selectedEmployeeId) {
+                          setError('Selecione um funcionário.');
+                          return;
+                        }
+                        setAttendanceForm({ day: isoDate(new Date()), status: 'note', note: '' });
+                        setModal('attendance');
+                      }}
                       className="rounded-full bg-amber-500/15 px-4 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-500/20 disabled:opacity-60"
                     >
                       Adicionar Observação

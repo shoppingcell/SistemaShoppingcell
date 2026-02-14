@@ -20,9 +20,9 @@ export default async function RhPage() {
 
   const { data: attendance, error: attErr } = await supabase
     .from('hr_attendance')
-    .select('id,day,status,note')
+    .select('id,employee_id,day,status,note')
     .order('day', { ascending: false })
-    .limit(370);
+    .limit(1000);
 
   const missingEmployees = Boolean(
     empErr && /relation .*hr_employees.* does not exist/i.test(empErr.message),
