@@ -39,6 +39,7 @@ export function PdvClient({ products }: { products: ProductRow[] }) {
 
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [fiadoPaidNow, setFiadoPaidNow] = useState('0');
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -113,9 +114,11 @@ export function PdvClient({ products }: { products: ProductRow[] }) {
     try {
       if (cart.length === 0) throw new Error('Carrinho vazio.');
       if (payment === 'fiado') {
-        if (!customerName.trim() && !customerPhone.trim()) {
-          throw new Error('Fiado exige cliente (nome e/ou telefone).');
-        }
+        // Pode ser no cadastro (nome/telefone) ou no balcão (sem dados).
+        // Se não informar, o servidor usa o cliente "Balcão".
+        const paidNow = Number((fiadoPaidNow || '0').replace(',', '.')) || 0;
+        if (paidNow < 0) throw new Error('Entrada do fiado inválida.');
+        if (paidNow > total) throw new Error('Entrada não pode ser maior que o total.');
       }
 
       const payloadItems = cart.map((it) => ({
@@ -130,6 +133,8 @@ export function PdvClient({ products }: { products: ProductRow[] }) {
           ? { name: customerName.trim(), phone: customerPhone.trim() }
           : null;
 
+      const paidNow = Number((fiadoPaidNow || '0').replace(',', '.')) || 0;
+
       const { data, error } = await supabase.rpc('pdv_create_sale', {
         p_payment_method: payment,
         p_items: payloadItems,
@@ -137,7 +142,7 @@ export function PdvClient({ products }: { products: ProductRow[] }) {
         p_discount_total: discT,
         p_due_date: null,
         // For dinheiro: send received amount (server calculates change)
-        p_paid_amount: payment === 'dinheiro' ? received : payment === 'fiado' ? 0 : total,
+        p_paid_amount: payment === 'dinheiro' ? received : payment === 'fiado' ? paidNow : total,
       } as any);
 
       if (error) throw error;
@@ -147,6 +152,7 @@ export function PdvClient({ products }: { products: ProductRow[] }) {
       setDiscountTotal('0');
       setCustomerName('');
       setCustomerPhone('');
+      setFiadoPaidNow('0');
       setCashReceived('');
       setQ('');
     } catch (e: any) {
@@ -363,18 +369,35 @@ export function PdvClient({ products }: { products: ProductRow[] }) {
 
             {payment === 'fiado' && (
               <div className="grid gap-2 rounded-2xl border border-white/10 bg-white/5 p-4">
-                <div className="text-sm font-extrabold text-slate-100">Cliente (fiado)</div>
-                <Input
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="Nome"
-                />
-                <Input
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  placeholder="Telefone/WhatsApp"
-                />
-                <div className="text-xs text-slate-400">Fiado exige cliente.</div>
+                <div className="text-sm font-extrabold text-slate-100">Fiado</div>
+
+                <div className="grid gap-2 md:grid-cols-2">
+                  <Input
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder="Nome (opcional)"
+                  />
+                  <Input
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    placeholder="Telefone/WhatsApp (opcional)"
+                  />
+                </div>
+
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Entrada (pago agora)
+                  </div>
+                  <Input
+                    value={fiadoPaidNow}
+                    onChange={(e) => setFiadoPaidNow(e.target.value)}
+                    placeholder="0"
+                  />
+                </div>
+
+                <div className="text-xs text-slate-400">
+                  Se não informar cliente, registra no <span className="font-semibold">Balcão</span>.
+                </div>
               </div>
             )}
 
