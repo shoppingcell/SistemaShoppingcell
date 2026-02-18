@@ -26,23 +26,39 @@ export default async function HomePage() {
     .limit(8);
 
   const featuredIds = (featured ?? []).map((p: any) => p.id);
-  const { data: media } = featuredIds.length
+
+  const { data: latest } =
+    featuredIds.length === 0
+      ? await supabase
+          .from('products')
+          .select('id,name,slug,active,featured,sheet_code')
+          .eq('active', true)
+          .order('updated_at', { ascending: false })
+          .limit(8)
+      : { data: [] as any[] };
+
+  const sourceProducts = featuredIds.length > 0 ? (featured ?? []) : (latest ?? []);
+  const sourceIds = sourceProducts.map((p: any) => p.id);
+
+  const { data: media } = sourceIds.length
     ? await supabase
         .from('product_media')
         .select('product_id,url')
         .eq('is_primary', true)
-        .in('product_id', featuredIds)
+        .in('product_id', sourceIds)
     : { data: [] as any[] };
 
   const imageByProductId = new Map((media ?? []).map((m: any) => [m.product_id, m.url]));
 
-  const featuredView = (featured ?? []).map((p: any) => ({
+  const featuredView = sourceProducts.map((p: any) => ({
     id: p.id,
     name: p.name,
     slug: p.slug,
     imageUrl: imageByProductId.get(p.id) ?? null,
     sheet_code: p.sheet_code ?? null,
   }));
+
+  const usingFallback = featuredIds.length === 0;
 
   return (
     <main className="min-h-screen bg-black text-white">
@@ -112,35 +128,68 @@ export default async function HomePage() {
 
       {/* Testimonials / Comentários */}
       <TestimonialsSection
-        title="Comentários de clientes"
-        description="Algumas experiências de quem já compra com a gente."
+        title="Comentários reais (Google)"
+        description="Depoimentos reais da loja no Google Maps. Clique para abrir a avaliação."
         testimonials={[
           {
             author: {
-              name: 'Carlos',
-              handle: 'Assistência',
+              name: 'Cliente Google',
+              handle: 'Avaliação 1',
               avatar:
                 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face',
             },
-            text: 'Chegou rápido e a qualidade das peças é muito boa. Atendimento no WhatsApp agiliza demais.',
+            text: 'Comentário real no Google Maps. Toque para abrir a avaliação completa.',
+            href: 'https://share.google/KJjghkGv2UdDT0M9B',
           },
           {
             author: {
-              name: 'Mariana',
-              handle: 'Loja',
+              name: 'Cliente Google',
+              handle: 'Avaliação 2',
               avatar:
                 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop&crop=face',
             },
-            text: 'Cotação rápida e estoque sempre atualizado. Ajuda muito no atacado.',
+            text: 'Comentário real no Google Maps. Toque para abrir a avaliação completa.',
+            href: 'https://share.google/OZj5ETjWj9xs0sGdp',
           },
           {
             author: {
-              name: 'Rafael',
-              handle: 'Técnico',
+              name: 'Cliente Google',
+              handle: 'Avaliação 3',
               avatar:
                 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=150&fit=crop&crop=face',
             },
-            text: 'Padrão de qualidade alto. Recomendo pra quem trabalha com manutenção.',
+            text: 'Comentário real no Google Maps. Toque para abrir a avaliação completa.',
+            href: 'https://share.google/meZvbfWfm7jQ61BtP',
+          },
+          {
+            author: {
+              name: 'Cliente Google',
+              handle: 'Avaliação 4',
+              avatar:
+                'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150&h=150&fit=crop&crop=face',
+            },
+            text: 'Comentário real no Google Maps. Toque para abrir a avaliação completa.',
+            href: 'https://share.google/PPuhpw4TYC6IMFotF',
+          },
+          {
+            author: {
+              name: 'Cliente Google',
+              handle: 'Avaliação 5',
+              avatar:
+                'https://images.unsplash.com/photo-1541534401786-2077eed87a72?w=150&h=150&fit=crop&crop=face',
+            },
+            text: 'Comentário real no Google Maps. Toque para abrir a avaliação completa.',
+            href: 'https://share.google/MrltRxzmiN4WTFvtR',
+          },
+          {
+            author: {
+              name: 'Cliente Google',
+              handle: 'Avaliação 6',
+              avatar:
+                'https://images.unsplash.com/photo-1521119989659-a83eee488004?w=150&h=150&fit=crop&crop=face',
+            },
+            text: 'Comentário real no Google Maps. Toque para abrir a avaliação completa.',
+            href: 'https://share.google/r2lNObvRlqnuffRTf',
           },
         ]}
       />
@@ -151,11 +200,13 @@ export default async function HomePage() {
           <div className="flex flex-col items-start justify-between gap-3 md:flex-row md:items-end">
             <div>
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Destaque do atacado
+                {usingFallback ? 'Catálogo em destaque' : 'Destaque do atacado'}
               </div>
               <h2 className="mt-2 text-3xl font-extrabold tracking-tight">Escolha itens e peça a cotação</h2>
               <p className="mt-2 text-sm text-slate-400">
-                Selecione a quantidade e envie a lista pelo WhatsApp.
+                {usingFallback
+                  ? 'Ainda sem itens marcados como destaque. Exibindo novidades do catálogo para não ficar vazio.'
+                  : 'Selecione a quantidade e envie a lista pelo WhatsApp.'}
               </p>
             </div>
             <Link href="/catalogo" className="text-sm font-semibold text-yellow-300 hover:text-yellow-200">
@@ -168,11 +219,16 @@ export default async function HomePage() {
               Erro ao carregar destaques: {featuredErr.message}
             </div>
           ) : featuredView.length === 0 ? (
-            <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-              Ainda não há produtos em destaque. Marque &quot;Destaque&quot; no Admin → Produtos.
+            <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-5 text-sm text-slate-300">
+              Ainda não há produtos ativos para mostrar. Cadastre no Admin → Produtos para liberar o catálogo.
             </div>
           ) : (
-            <div className="mt-8">
+            <div className="mt-8 rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.06] to-transparent p-2">
+              {usingFallback ? (
+                <div className="px-4 pt-4 text-xs font-semibold uppercase tracking-wide text-amber-200">
+                  Mostrando novidades até você marcar produtos como destaque
+                </div>
+              ) : null}
               <HomeFeaturedClient products={featuredView} />
             </div>
           )}

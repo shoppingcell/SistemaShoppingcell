@@ -88,6 +88,7 @@ export function RhClient({
     status: 'present' as 'present' | 'absent' | 'note',
     note: '',
   });
+  const [selectedDay, setSelectedDay] = useState<string>(isoDate(new Date()));
 
   const activeEmployees = useMemo(() => employees.filter((e) => e.status === 'active').length, [employees]);
 
@@ -249,7 +250,24 @@ export function RhClient({
       note: attendanceForm.note.trim() || null,
     });
     setModal(null);
-    setAttendanceForm({ day: isoDate(new Date()), status: 'present', note: '' });
+    setAttendanceForm({ day: selectedDay, status: 'present', note: '' });
+  }
+
+  function openAttendanceEditor(day: string) {
+    if (!selectedEmployeeId) {
+      setError('Selecione um funcionário para editar presenças.');
+      return;
+    }
+
+    const found = attendanceByDay.get(day);
+    setSelectedDay(day);
+    setAttendanceForm({
+      day,
+      status: (found?.status === 'absent' ? 'absent' : found?.status === 'note' ? 'note' : 'present') as any,
+      note: found?.note || '',
+    });
+    setError(null);
+    setModal('attendance');
   }
 
   return (
@@ -525,7 +543,7 @@ export function RhClient({
                   <div className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-200">
                     Obs.
                   </div>
-                  <div className="ml-auto text-xs text-slate-500">(sem vincular funcionário agora)</div>
+                  <div className="ml-auto text-xs text-slate-500">(clique no dia para editar)</div>
                 </div>
 
                 <div className="mt-4 grid grid-cols-7 gap-2 text-xs text-slate-500">
@@ -555,27 +573,14 @@ export function RhClient({
                         title={
                           c.note ? `${c.date} — ${c.note}` : c.status ? `${c.date} — ${c.status}` : c.date
                         }
-                        onClick={() => {
-                          if (!selectedEmployeeId) {
-                            setError('Selecione um funcionário para editar presenças.');
-                            return;
-                          }
-                          setAttendanceForm({
-                            day: c.date,
-                            status: (c.status === 'absent'
-                              ? 'absent'
-                              : c.status === 'note'
-                                ? 'note'
-                                : 'present') as any,
-                            note: c.note || '',
-                          });
-                          setModal('attendance');
-                        }}
+                        onClick={() => openAttendanceEditor(c.date)}
                         className={
                           'rounded-xl border p-2 text-left transition-colors hover:bg-white/10 ' +
-                          (c.inMonth
-                            ? 'border-white/10 bg-white/5'
-                            : 'border-white/5 bg-slate-950 text-slate-600')
+                          (c.date === selectedDay
+                            ? 'border-amber-300/60 bg-amber-300/10'
+                            : c.inMonth
+                              ? 'border-white/10 bg-white/5'
+                              : 'border-white/5 bg-slate-950 text-slate-600')
                         }
                       >
                         <div className="flex items-start justify-between">
@@ -592,9 +597,16 @@ export function RhClient({
 
                 <div className="mt-4 grid gap-2 rounded-2xl border border-white/10 bg-white/5 p-4">
                   <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Ações rápidas
+                    RH (pós-calendário)
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    <button
+                      disabled={saving}
+                      onClick={() => openAttendanceEditor(selectedDay)}
+                      className="rounded-full bg-amber-500/15 px-4 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-500/20 disabled:opacity-60"
+                    >
+                      Editar dia selecionado ({selectedDay})
+                    </button>
                     <button
                       disabled={saving}
                       onClick={() => void markToday('present')}

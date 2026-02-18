@@ -200,9 +200,18 @@ export default function PedidoDetailPage() {
         title="Pedido"
         subtitle={`ID: ${String(id).slice(0, 8)}`}
         actions={
-          <Link href="/admin/pedidos" className="text-sm font-semibold text-slate-200 hover:text-white">
-            ← Voltar
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/admin/pedidos/${id}/comprovante`}
+              target="_blank"
+              className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-extrabold text-slate-100 hover:bg-white/10"
+            >
+              Comprovante 80mm
+            </Link>
+            <Link href="/admin/pedidos" className="text-sm font-semibold text-slate-200 hover:text-white">
+              ← Voltar
+            </Link>
+          </div>
         }
       />
 

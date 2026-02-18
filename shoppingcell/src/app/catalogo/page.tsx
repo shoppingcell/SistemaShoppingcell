@@ -9,8 +9,8 @@ type Product = {
   name: string;
   slug: string;
   description: string | null;
-  base_price_cents: number;
   featured?: boolean | null;
+  sheet_code?: string | null;
 };
 
 type MediaRow = {
@@ -21,7 +21,7 @@ type MediaRow = {
 export default async function CatalogoPage() {
   const { data, error } = await supabase
     .from('products')
-    .select('id,name,slug,description,base_price_cents,featured')
+    .select('id,name,slug,description,featured,sheet_code')
     .eq('active', true)
     .order('created_at', { ascending: false })
     .limit(120);
@@ -52,31 +52,45 @@ export default async function CatalogoPage() {
     (media as MediaRow[] | null | undefined)?.map((m) => [m.product_id, m.url]) ?? [],
   );
 
-  const whatsappE164 = process.env.NEXT_PUBLIC_WHATSAPP_E164 || '+559492814167';
+  // WhatsApp is handled via n8n webhook (cotação atacado)
 
   return (
-    <main className="min-h-screen bg-slate-900 px-4 py-12 text-white">
+    <main className="min-h-screen bg-black px-4 py-12 text-white">
       <div className="mx-auto max-w-6xl">
-        <div className="flex items-end justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-extrabold">Catálogo</h1>
-            <p className="mt-2 text-sm text-slate-300">Peças Apple com qualidade premium.</p>
+        <div className="rounded-3xl border border-white/10 bg-gradient-to-b from-slate-900 to-slate-950 p-6 shadow-[0_20px_70px_rgba(0,0,0,0.45)] md:p-8">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                Shopping Cell
+              </div>
+              <h1 className="mt-2 text-3xl font-extrabold md:text-4xl">Catálogo Premium</h1>
+              <p className="mt-2 text-sm text-slate-300">
+                Peças Apple para atacado. Monte sua lista e peça cotação no WhatsApp.
+              </p>
+            </div>
+            <Link href="/" className="text-sm font-semibold text-slate-200 hover:text-white">
+              ← Home
+            </Link>
           </div>
-          <Link href="/" className="text-sm text-slate-200 hover:text-white">
-            ← Home
-          </Link>
+
+          <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-300">
+            {['Atacado', 'Envio', 'Pronta entrega', 'Cotação rápida'].map((item) => (
+              <span key={item} className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                {item}
+              </span>
+            ))}
+          </div>
         </div>
 
         <CatalogoClient
-          whatsappE164={whatsappE164}
           products={products.map((p) => ({
             id: p.id,
             name: p.name,
             slug: p.slug,
             description: p.description,
-            base_price_cents: p.base_price_cents,
             featured: Boolean(p.featured),
             imageUrl: mediaByProductId.get(p.id) ?? null,
+            sheet_code: p.sheet_code ?? null,
           }))}
         />
 
