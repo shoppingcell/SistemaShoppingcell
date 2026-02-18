@@ -6,7 +6,7 @@ import { supabaseBrowser as supabase } from '@/lib/supabaseBrowser';
 import { Panel } from '@/app/admin/_components/ui/Panel';
 import { Button } from '@/app/admin/_components/ui/Button';
 import { Input } from '@/app/admin/_components/ui/Input';
-import { Select } from '@/app/admin/_components/ui/Select';
+// Select removed (not used)
 import { Modal } from '@/app/admin/_components/ui/Modal';
 import {
   ResponsiveContainer,
@@ -54,7 +54,7 @@ function shortMonthLabel(iso: string) {
 }
 
 function shortDay(iso: string) {
-  const [y, m, d] = String(iso || '').split('-');
+  const [, m, d] = String(iso || '').split('-');
   if (!d) return iso;
   return `${d}/${m}`;
 }
@@ -173,7 +173,7 @@ export function FinanceiroClient({ txs, payables }: { txs: Tx[]; payables: Payab
         return true;
       })
       .sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)));
-  }, [payables, payablesFilter, today]);
+  }, [payables, payablesFilter, today, todayIso]);
 
   const calendar = useMemo(() => {
     // Minimal monthly calendar for due_date markers

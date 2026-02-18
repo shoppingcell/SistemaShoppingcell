@@ -87,7 +87,7 @@ export default function EditarProdutoPage() {
           const subs = await loadSubcategories(data.category_id);
           setSubcategories(subs as any);
         }
-      } catch (e: any) {
+      } catch {
         // ignore; subcategories might not be enabled yet
         setSubcategories([]);
       }

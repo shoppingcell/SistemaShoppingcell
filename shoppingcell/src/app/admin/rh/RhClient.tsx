@@ -138,7 +138,7 @@ export function RhClient({
       monthLabel: monthStart.toLocaleString('pt-BR', { month: 'long', year: 'numeric' }),
       cells,
     };
-  }, [attendanceByDay]);
+  }, [attendanceByDay, monthCursor]);
 
   async function createEmployee() {
     if (!employeeForm.name.trim()) return;

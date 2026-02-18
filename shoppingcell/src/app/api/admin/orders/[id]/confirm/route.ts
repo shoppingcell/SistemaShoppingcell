@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabaseServer';
+// createSupabaseServerClient not needed in this route
 import { createSupabaseServiceClient } from '@/lib/supabaseService';
 import { writeBackStockByCode } from '@/lib/googleSheetsStock';
 

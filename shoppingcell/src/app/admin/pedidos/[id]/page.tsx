@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabaseBrowser as supabase } from '@/lib/supabaseBrowser';
 import { PageHeader } from '@/app/admin/_components/ui/PageHeader';
@@ -31,61 +31,44 @@ export default function PedidoDetailPage() {
   const [saving, setSaving] = useState(false);
   const [paidAmount, setPaidAmount] = useState('');
   const [paidCategory, setPaidCategory] = useState('Vendas');
+  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'dinheiro' | 'cartao'>('pix');
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
 
-    const [{ data: o, error: oErr }, { data: its, error: iErr }, { data: prods }] = await Promise.all([
+    const [{ data: o, error: oErr }, { data: its, error: iErr }] = await Promise.all([
       supabase.from('orders').select('*').eq('id', id).single(),
       supabase.from('order_items').select('*').eq('order_id', id),
-      supabase
-        .from('products')
-        .select('id,name,sheet_code')
-        .in(
-          'id',
-          (items ?? []).map((x) => x.product_id),
-        ),
     ]);
 
-    if (oErr) setError(oErr.message);
-    if (iErr) setError(iErr.message);
+    if (oErr) {
+      setError(oErr.message);
+      setLoading(false);
+      return;
+    }
+
+    if (iErr) {
+      setError(iErr.message);
+      setLoading(false);
+      return;
+    }
+
+    const ids = ((its as any[]) ?? []).map((x: any) => x.product_id).filter(Boolean);
+    const { data: prods } = ids.length
+      ? await supabase.from('products').select('id,name,sheet_code').in('id', ids)
+      : { data: [] as any[] };
 
     const nameById = new Map((prods ?? []).map((p: any) => [p.id, p]));
     setOrder(o);
-    setItems((its ?? []).map((it: any) => ({ ...it, product: nameById.get(it.product_id) })));
+    setItems(((its as any[]) ?? []).map((it: any) => ({ ...it, product: nameById.get(it.product_id) })));
     setLoading(false);
-  }
+  }, [id]);
 
   useEffect(() => {
-    // load items first, then products
-    (async () => {
-      setLoading(true);
-      setError(null);
-      const { data: o, error: oErr } = await supabase
-        .from('orders')
-        .select('*, customers(name,phone)')
-        .eq('id', id)
-        .single();
-      if (oErr) {
-        setError(oErr.message);
-        setLoading(false);
-        return;
-      }
-      const { data: its, error: iErr } = await supabase.from('order_items').select('*').eq('order_id', id);
-      if (iErr) {
-        setError(iErr.message);
-        setLoading(false);
-        return;
-      }
-      const ids = (its ?? []).map((x: any) => x.product_id);
-      const { data: prods } = await supabase.from('products').select('id,name,sheet_code').in('id', ids);
-      const byId = new Map((prods ?? []).map((p: any) => [p.id, p]));
-      setOrder(o);
-      setItems((its ?? []).map((it: any) => ({ ...it, product: byId.get(it.product_id) })));
-      setLoading(false);
-    })();
-  }, [id]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [load]);
 
   const total = useMemo(
     () => items.reduce((acc, it) => acc + Number(it.price ?? 0) * Number(it.quantity ?? 0), 0),
@@ -166,12 +149,19 @@ export default function PedidoDetailPage() {
     setSaving(true);
     setError(null);
 
+    if (!paymentMethod) {
+      setError('Selecione a forma de pagamento (PIX, Dinheiro ou Cartão).');
+      setSaving(false);
+      return;
+    }
+
     const amt = paidAmount.trim() ? Number(paidAmount.replace(',', '.')) : total;
 
     const { error: txErr } = await supabase.from('finance_transactions').insert({
       type: 'income',
+      payment_method: paymentMethod,
       category: paidCategory.trim() || 'Vendas',
-      description: `Pedido ${String(id).slice(0, 8)} (pago)`,
+      description: `Pedido ${String(id).slice(0, 8)} (pago)` + ` [${paymentMethod.toUpperCase()}]`,
       amount: amt,
       occurred_at: new Date().toISOString(),
       order_id: id,
@@ -302,6 +292,45 @@ export default function PedidoDetailPage() {
           <div className="text-sm text-slate-300">
             Vai registrar uma entrada no Financeiro e marcar o pedido como{' '}
             <span className="font-semibold">Pago</span>.
+          </div>
+
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Forma de pagamento
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              className={`rounded-2xl border px-4 py-3 text-xs font-extrabold ${
+                paymentMethod === 'pix'
+                  ? 'border-yellow-400/60 bg-yellow-400/10 text-yellow-200'
+                  : 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10'
+              }`}
+              onClick={() => setPaymentMethod('pix')}
+            >
+              PIX
+            </button>
+            <button
+              type="button"
+              className={`rounded-2xl border px-4 py-3 text-xs font-extrabold ${
+                paymentMethod === 'dinheiro'
+                  ? 'border-yellow-400/60 bg-yellow-400/10 text-yellow-200'
+                  : 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10'
+              }`}
+              onClick={() => setPaymentMethod('dinheiro')}
+            >
+              Dinheiro
+            </button>
+            <button
+              type="button"
+              className={`rounded-2xl border px-4 py-3 text-xs font-extrabold ${
+                paymentMethod === 'cartao'
+                  ? 'border-yellow-400/60 bg-yellow-400/10 text-yellow-200'
+                  : 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10'
+              }`}
+              onClick={() => setPaymentMethod('cartao')}
+            >
+              Cartão
+            </button>
           </div>
 
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">

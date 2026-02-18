@@ -10,7 +10,7 @@ export type OrdersDay = {
 };
 
 function shortDay(s: string) {
-  const [y, m, d] = String(s || '').split('-');
+  const [, m, d] = String(s || '').split('-');
   if (!d) return s;
   return `${d}/${m}`;
 }

@@ -6,15 +6,18 @@ import { supabaseBrowser as supabase } from '@/lib/supabaseBrowser';
 import { slugify } from '@/lib/slugify';
 
 type Category = { id: string; name: string };
+type Subcategory = { id: string; name: string; category_id: string };
 
 export default function NovoProdutoPage() {
   const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
+  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
 
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
   const [categoryId, setCategoryId] = useState<string>('');
+  const [subcategoryId, setSubcategoryId] = useState<string>('');
   const [price, setPrice] = useState<string>('');
   const [active, setActive] = useState(true);
   const [featured, setFeatured] = useState(false);
@@ -29,6 +32,18 @@ export default function NovoProdutoPage() {
       .order('sort', { ascending: true })
       .then(({ data }) => setCategories((data as any) ?? []));
   }, []);
+
+  useEffect(() => {
+    // Load subcategories for the selected category (if any)
+    const cat = categoryId || '__none__';
+
+    supabase
+      .from('subcategories')
+      .select('id,name,category_id')
+      .eq('category_id', cat)
+      .order('sort', { ascending: true })
+      .then(({ data }) => setSubcategories((data as any) ?? []));
+  }, [categoryId]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -45,6 +60,7 @@ export default function NovoProdutoPage() {
         slug: finalSlug,
         description: description || null,
         category_id: categoryId || null,
+        subcategory_id: subcategoryId || null,
         price: parsedPrice,
         price_locked: true,
         active,
@@ -99,7 +115,10 @@ export default function NovoProdutoPage() {
           <select
             className="mt-1 w-full rounded-md bg-slate-900 p-3 text-white"
             value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
+            onChange={(e) => {
+              setCategoryId(e.target.value);
+              setSubcategoryId('');
+            }}
           >
             <option value="">—</option>
             {categories.map((c) => (
@@ -108,6 +127,26 @@ export default function NovoProdutoPage() {
               </option>
             ))}
           </select>
+        </label>
+
+        <label className="text-sm text-slate-200">
+          Subcategoria
+          <select
+            className="mt-1 w-full rounded-md bg-slate-900 p-3 text-white"
+            value={subcategoryId}
+            onChange={(e) => setSubcategoryId(e.target.value)}
+            disabled={!categoryId}
+          >
+            <option value="">—</option>
+            {subcategories.map((sc) => (
+              <option key={sc.id} value={sc.id}>
+                {sc.name}
+              </option>
+            ))}
+          </select>
+          {!categoryId ? (
+            <div className="mt-1 text-xs text-slate-500">Selecione uma categoria primeiro.</div>
+          ) : null}
         </label>
 
         <label className="text-sm text-slate-200">

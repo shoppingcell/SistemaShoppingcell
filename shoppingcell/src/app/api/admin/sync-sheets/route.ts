@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabaseServer';
+// createSupabaseServerClient not needed in this route
 import { createSupabaseServiceClient } from '@/lib/supabaseService';
 import { parseCsv } from '@/lib/csv';
 import { slugify } from '@/lib/slugify';
@@ -254,7 +254,7 @@ export async function POST(req: Request) {
     );
   const productIdBySlug = new Map((products ?? []).map((p) => [p.slug, p.id]));
 
-  const invProductIds = sheetProducts.map((p) => productIdBySlug.get(p.slug)).filter(Boolean) as string[];
+  // inventory ids are derived below via invUpserts; no standalone list required.
 
   const { data: existingInv, error: invReadErr } = await service
     .from('inventory')

@@ -4,7 +4,7 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianG
 
 function shortDay(s: string) {
   // yyyy-mm-dd -> dd/mm
-  const [y, m, d] = String(s || '').split('-');
+  const [, m, d] = String(s || '').split('-');
   if (!d) return s;
   return `${d}/${m}`;
 }
