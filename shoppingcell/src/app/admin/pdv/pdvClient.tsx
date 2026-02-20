@@ -213,6 +213,15 @@ export function PdvClient({ products }: { products: ProductRow[] }) {
             <div className="text-sm text-slate-400">Adicione itens no carrinho.</div>
           ) : (
             <div className="grid gap-2">
+              <div className="mb-1 flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={() => setCart([])}
+                  className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-1 text-xs font-bold text-red-200 hover:bg-red-500/20"
+                >
+                  Esvaziar carrinho
+                </button>
+              </div>
               {cart.map((it) => (
                 <div key={it.product.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <div className="flex items-start justify-between gap-3">
@@ -221,10 +230,11 @@ export function PdvClient({ products }: { products: ProductRow[] }) {
                       <div className="mt-1 text-xs text-slate-400">{money(it.unit_price)} / un</div>
                     </div>
                     <button
-                      className="text-xs font-semibold text-red-200 hover:text-red-100"
+                      type="button"
+                      className="rounded-md border border-red-400/30 bg-red-500/10 px-2 py-1 text-xs font-semibold text-red-200 hover:bg-red-500/20 hover:text-red-100"
                       onClick={() => setCart((old) => old.filter((x) => x.product.id !== it.product.id))}
                     >
-                      Remover
+                      Excluir item
                     </button>
                   </div>
 
@@ -351,6 +361,25 @@ export function PdvClient({ products }: { products: ProductRow[] }) {
               </button>
             </div>
 
+            <div className="grid gap-2 rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="text-sm font-extrabold text-slate-100">Cliente da venda (opcional)</div>
+              <div className="grid gap-2 md:grid-cols-2">
+                <Input
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="Nome do cliente"
+                />
+                <Input
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  placeholder="Telefone/WhatsApp"
+                />
+              </div>
+              <div className="text-xs text-slate-400">
+                Use para PIX, Dinheiro ou Fiado. Se deixar vazio, registra no balcão quando permitido.
+              </div>
+            </div>
+
             {payment === 'dinheiro' && (
               <div className="grid gap-2 rounded-2xl border border-white/10 bg-white/5 p-4">
                 <div className="text-sm font-extrabold text-slate-100">Dinheiro</div>
@@ -370,19 +399,6 @@ export function PdvClient({ products }: { products: ProductRow[] }) {
             {payment === 'fiado' && (
               <div className="grid gap-2 rounded-2xl border border-white/10 bg-white/5 p-4">
                 <div className="text-sm font-extrabold text-slate-100">Fiado</div>
-
-                <div className="grid gap-2 md:grid-cols-2">
-                  <Input
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    placeholder="Nome (opcional)"
-                  />
-                  <Input
-                    value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
-                    placeholder="Telefone/WhatsApp (opcional)"
-                  />
-                </div>
 
                 <div>
                   <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
