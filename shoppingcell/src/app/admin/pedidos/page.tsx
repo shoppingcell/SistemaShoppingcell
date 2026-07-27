@@ -1,9 +1,8 @@
 import Link from 'next/link';
 import { createSupabaseServerClient } from '@/lib/supabaseServer';
 import { PageHeader } from '@/app/admin/_components/ui/PageHeader';
-import { Panel } from '@/app/admin/_components/ui/Panel';
-import { PaymentBadge, StatusBadge } from '@/app/admin/pedidos/OrderBadges';
 import { PedidosCharts, type OrdersDay } from '@/app/admin/pedidos/PedidosCharts';
+import { PedidosClient } from '@/app/admin/pedidos/PedidosClient';
 
 export const dynamic = 'force-dynamic';
 
@@ -79,65 +78,15 @@ export default async function PedidosPage() {
         <div className="grid gap-4">
           <PedidosCharts data={days} />
 
-          <Panel>
-            <div className="border-b border-white/10 px-6 py-5">
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-semibold text-slate-200">Últimos pedidos</div>
-                <div className="text-xs text-slate-400">{(orders ?? []).length} exibidos</div>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
-                  <tr className="border-b border-white/10">
-                    <th className="px-6 py-4">Status</th>
-                    <th className="px-6 py-4">Pagamento</th>
-                    <th className="px-6 py-4">Cliente</th>
-                    <th className="px-6 py-4">WhatsApp</th>
-                    <th className="px-6 py-4">Criado</th>
-                    <th className="px-6 py-4">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(orders ?? []).map((o) => (
-                    <tr key={o.id} className="border-b border-white/5 hover:bg-white/5">
-                      <td className="px-6 py-4">
-                        <StatusBadge status={o.status as any} />
-                      </td>
-                      <td className="px-6 py-4">
-                        <PaymentBadge status={(o as any).payment_status ?? 'pending'} />
-                      </td>
-                      <td className="px-6 py-4 font-semibold text-slate-100">
-                        {(o as any).customers?.name ?? o.customer_name ?? '—'}
-                      </td>
-                      <td className="px-6 py-4 text-slate-300">
-                        {(o as any).customers?.phone ?? o.customer_phone ?? '—'}
-                      </td>
-                      <td className="px-6 py-4 text-slate-400">
-                        {new Date(o.created_at).toLocaleString('pt-BR')}
-                      </td>
-                      <td className="px-6 py-4">
-                        <Link
-                          href={`/admin/pedidos/${o.id}`}
-                          className="font-semibold text-yellow-300 hover:text-yellow-200"
-                        >
-                          Abrir
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                  {(orders ?? []).length === 0 && (
-                    <tr>
-                      <td className="px-6 py-10 text-slate-400" colSpan={6}>
-                        Nenhum pedido ainda.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Panel>
+          <PedidosClient orders={(orders ?? []).map((o: any) => ({
+            id: o.id,
+            status: o.status,
+            payment_status: o.payment_status,
+            customer_name: o.customer_name,
+            customer_phone: o.customer_phone,
+            customers: o.customers,
+            created_at: o.created_at,
+          }))} />
         </div>
       )}
     </div>
