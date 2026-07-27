@@ -1,0 +1,10 @@
+{
+  "name": "sistema-shoppingcell-root",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix shoppingcell run dev -- --hostname 0.0.0.0",
+    "build": "npm --prefix shoppingcell run build",
+    "start": "npm --prefix shoppingcell run start -- --hostname 0.0.0.0",
+    "lint": "npm --prefix shoppingcell run lint"
+  }
+}

@@ -20,8 +20,16 @@
 }
 
 body {
-  background: var(--background);
+  background:
+    radial-gradient(circle at top left, rgba(34, 211, 238, 0.12), transparent 28%),
+    linear-gradient(135deg, #020617 0%, #030712 100%);
   color: var(--foreground);
+  min-height: 100vh;
+}
+
+::selection {
+  background: rgba(34, 211, 238, 0.35);
+  color: #f8fafc;
 }
 
 @keyframes shimmer-slide {
