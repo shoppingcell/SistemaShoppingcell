@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { SITE_LOGO_URL } from '@/lib/siteAssets';
 import { supabase } from '@/lib/supabaseClient';
 import { HomeFeaturedClient } from '@/app/HomeFeaturedClient';
-import { HomeHeroStepsClient } from '@/app/HomeHeroStepsClient';
+import { ScrollScrubHeroClient } from '@/app/ScrollScrubHeroClient';
 import { SiteHeaderClient } from '@/app/SiteHeaderClient';
 import { ShimmerLink } from '@/components/ui/ShimmerLink';
 import { TestimonialsSection } from '@/components/ui/testimonials-with-marquee';
@@ -67,12 +67,12 @@ export default async function HomePage() {
       {/* CINEMATIC HERO (stable steps) */}
       <div className="px-4 pt-6">
         <div className="mx-auto max-w-7xl">
-          <HomeHeroStepsClient
-            closedSrc="/hero/closed.jpg?v=8"
-            openMp4Src="/hero/scroll.mp4?v=8"
-            openWebmSrc="/hero/scroll.webm?v=8"
-            openPosterSrc="/hero/poster.jpg?v=8"
-            finalSrc="/hero/frame_026.jpg?v=8"
+          <ScrollScrubHeroClient
+            framesDir="/hero/frames"
+            frameCount={27}
+            smoothFactor={0.35}
+            easePower={1.2}
+            heightVh={140}
           />
         </div>
       </div>

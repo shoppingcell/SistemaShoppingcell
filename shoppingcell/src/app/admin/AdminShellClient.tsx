@@ -2,7 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import Topbar from './_components/Topbar';
+import KpiCard from '../../components/ui/KpiCard';
+import DashboardKpis from './_components/DashboardKpis';
 
 type NavItem = {
   href: string;
@@ -146,7 +149,15 @@ export default function AdminShellClient({
 
         {/* Content */}
         <div className="w-full px-4 py-6 md:px-10">
-          <div className="mx-auto max-w-5xl">{children}</div>
+          <div className="mx-auto max-w-5xl">
+            <Topbar />
+
+            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
+              <DashboardKpis />
+            </div>
+
+            {children}
+          </div>
         </div>
       </div>
     </div>

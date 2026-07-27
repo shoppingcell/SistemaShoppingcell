@@ -31,6 +31,10 @@ export function ScrollScrubHeroClient(props: {
   showCopyFromProgress?: number; // hide copy until progress reaches this point
   showPinsFromProgress?: number; // show pins near the end
   openFromProgress?: number; // start opening animation after this progress
+  // Controls for animation feel
+  smoothFactor?: number; // 0..1, higher = faster smoothing of video seek (default 0.22)
+  easePower?: number; // easing power applied to open progress (default 1.05)
+  throttleSensitivity?: number; // minimal progress delta to update state (default 0.0015)
 }) {
   const {
     mp4Src,
@@ -40,7 +44,7 @@ export function ScrollScrubHeroClient(props: {
     frameCount = 0,
     closedSrc,
     finalSrc,
-    heightVh = 220,
+    heightVh = 140,
     stickyTopPx,
     features = [
       { title: 'Tela', desc: 'Peças e módulos premium para reposição.', at: 0.15 },
@@ -50,13 +54,17 @@ export function ScrollScrubHeroClient(props: {
     ],
     overlayTitle = 'Peças de iPhone no atacado',
     overlaySubtitle = 'Role a página: o iPhone se expande e mostra os detalhes.',
-    showCopyFromProgress = 0.18,
-    showPinsFromProgress = 0.86,
+    showCopyFromProgress = 0.12,
+    showPinsFromProgress = 0.82,
     // keep the device closed "floating" for the first part of the scroll
-    openFromProgress = 0.14,
+    openFromProgress = 0.12,
+    smoothFactor = 0.28,
+    easePower = 1.05,
+    throttleSensitivity = 0.0015,
   } = props;
 
   const sectionRef = useRef<HTMLElement | null>(null);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [stickyTop, setStickyTop] = useState<number>(typeof stickyTopPx === 'number' ? stickyTopPx : 96);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [frameIndex, setFrameIndex] = useState(0);
@@ -74,6 +82,17 @@ export function ScrollScrubHeroClient(props: {
   const sortedFeatures = useMemo(() => [...features].sort((a, b) => a.at - b.at), [features]);
 
   // Preload frames if using image sequence
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'matchMedia' in window) {
+      const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+      setPrefersReducedMotion(mq.matches);
+      const handler = () => setPrefersReducedMotion(mq.matches);
+      mq.addEventListener?.('change', handler);
+      return () => mq.removeEventListener?.('change', handler);
+    }
+    return undefined;
+  }, []);
+
   useEffect(() => {
     if (!framesDir || !frameCount || frameCount < 2) {
       return;
@@ -93,29 +112,77 @@ export function ScrollScrubHeroClient(props: {
       }
     }
 
-    sources.forEach((src) => {
-      const img = new Image();
-      img.onload = () => {
-        if (cancelled) return;
-        loaded += 1;
-        if (loaded >= Math.min(frameCount, 6)) {
-          // consider ready after a few frames to avoid blank while waiting all
-          setFramesReady(true);
-          setReady(true);
+    // Load first few frames quickly, then progressively load the rest to avoid blocking
+    const eagerLoadCount = Math.min(frameCount, 8);
+    const loadImg = (src: string) =>
+      new Promise<void>((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve();
+        img.onerror = () => resolve();
+        img.src = src;
+      });
+
+    (async () => {
+      try {
+        // eager load first frames
+        for (let i = 0; i < eagerLoadCount; i++) {
+          if (cancelled) return;
+          await loadImg(sources[i]);
+          loaded += 1;
+          if (loaded >= Math.min(frameCount, 6)) {
+            setFramesReady(true);
+            setReady(true);
+          }
         }
-      };
-      img.onerror = () => {
-        if (cancelled) return;
-        // If frames fail, we'll fall back to video
-        setFramesReady(false);
-      };
-      img.src = src;
-    });
+
+        // progressively load remaining frames in background
+        for (let i = eagerLoadCount; i < sources.length; i++) {
+          if (cancelled) return;
+          // small delay between background loads
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((r) => setTimeout(r, 120));
+          // eslint-disable-next-line no-await-in-loop
+          await loadImg(sources[i]);
+        }
+      } catch {
+        if (!cancelled) setFramesReady(false);
+      }
+    })();
 
     return () => {
       cancelled = true;
     };
   }, [framesDir, frameCount, finalSrc]);
+
+  // Pause animations when section is not visible (save CPU)
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+    let mounted = true;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (!mounted) return;
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            // resume
+            setDidInitialTick((v) => v);
+          } else {
+            // when not visible, no-op: loops check visibility via getBoundingClientRect
+          }
+        }
+      },
+      { threshold: 0.1 },
+    );
+    obs.observe(section);
+    return () => {
+      mounted = false;
+      obs.disconnect();
+    };
+  }, []);
+
+  // derive useful computed sources
+  const closedImageSrc = closedSrc ?? (framesDir && frameCount ? `${framesDir}/frame_001.jpg` : posterSrc);
+  const computedFinalSrc = finalSrc ?? (framesDir && frameCount ? `${framesDir}/frame_${String(frameCount).padStart(3, '0')}.jpg` : finalSrc);
 
   // Video metadata (fallback mode)
   useEffect(() => {
@@ -207,13 +274,14 @@ export function ScrollScrubHeroClient(props: {
       const p = computeProgress();
 
       // throttle state updates a bit
-      if (Math.abs(p - lastP) > 0.0015) {
+      if (Math.abs(p - lastP) > throttleSensitivity) {
         lastP = p;
         setProgress(p);
         setDidInitialTick(true);
 
         // Keep closed for the first segment, then map to 0..1 for the opening animation
-        const openP = clamp01((p - openFromProgress) / Math.max(1e-6, 1 - openFromProgress));
+        const rawOpenP = clamp01((p - openFromProgress) / Math.max(1e-6, 1 - openFromProgress));
+        const openP = Math.pow(rawOpenP, easePower);
 
         // Frame mode
         if (framesDir && frameCount && frameCount >= 2) {
@@ -239,7 +307,7 @@ export function ScrollScrubHeroClient(props: {
 
       const target = targetTimeRef.current;
       let cur = currentTimeRef.current;
-      cur = cur + (target - cur) * 0.22;
+      cur = cur + (target - cur) * smoothFactor;
       if (Math.abs(target - cur) < 0.015) cur = target;
 
       currentTimeRef.current = cur;
@@ -285,231 +353,64 @@ export function ScrollScrubHeroClient(props: {
       style={{ height: `${heightVh}vh` }}
     >
       <div className="sticky" style={{ top: stickyTop }}>
-        <div className="relative overflow-hidden rounded-3xl border border-slate-800 bg-black shadow-[0_30px_120px_rgba(0,0,0,0.75)]">
-          {/* poster is used only as <video poster>; we don't render it as a background image */}
-
-          {/* Media (stable height, centered). Start CLOSED, then reveal video as you scroll */}
-          <div className="relative flex h-[78svh] items-center justify-center md:h-[80svh]">
-            {closedSrc ? (
+        {prefersReducedMotion ? (
+          <div className="relative overflow-hidden rounded-3xl border border-slate-800 bg-black shadow-[0_30px_120px_rgba(0,0,0,0.75)]">
+            {computedFinalSrc ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={closedSrc}
-                alt="Fechado"
-                onLoad={() => setClosedReady(true)}
-                className="absolute left-1/2 top-1/2 z-10 h-[70vh] w-auto -translate-x-1/2 -translate-y-1/2 object-contain md:h-[72vh]"
-                style={{
-                  opacity: clamp01(1 - clamp01(progress / openFromProgress)),
-                  transform: `translate(-50%, -50%) scale(${1 + Math.max(0, openFromProgress - progress) * 0.9})`,
-                  filter: 'drop-shadow(0 30px 120px rgba(0,0,0,0.75))',
-                }}
-              />
+              <img src={computedFinalSrc} alt="Hero" className="w-full h-auto object-contain" />
             ) : null}
-
-            {/* Image sequence (preferred) */}
-            {framesDir && frameCount && frameCount >= 2 && framesReady ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={
-                  finalSrc && frameIndex >= frameCount - 1
-                    ? finalSrc
-                    : `${framesDir}/frame_${String(frameIndex + 1).padStart(3, '0')}.jpg`
-                }
-                alt="Hero"
-                className="absolute left-1/2 top-1/2 z-10 h-[70vh] w-auto -translate-x-1/2 -translate-y-1/2 object-contain md:h-[72vh]"
-                style={{
-                  opacity:
-                    finalSrc && progress >= showPinsFromProgress
-                      ? 0
-                      : closedSrc && !closedReady
-                        ? 0
-                        : closedSrc
-                          ? clamp01((progress - openFromProgress * 0.6) / (openFromProgress * 0.4))
-                          : 1,
-                  filter: 'drop-shadow(0 30px 120px rgba(0,0,0,0.75))',
-                }}
-              />
-            ) : null}
-
-            {/* Video fallback */}
-            {!framesDir || !frameCount || frameCount < 2 || !framesReady ? (
-              <>
-                {/* Poster layer disabled when we have `closedSrc` (otherwise it can look like a second device on iOS) */}
-                {posterSrc && !closedSrc ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={posterSrc}
-                    alt=""
-                    aria-hidden="true"
-                    className="absolute left-1/2 top-1/2 z-[9] h-[70vh] w-full max-w-[520px] -translate-x-1/2 -translate-y-1/2 object-contain md:h-[72vh] md:max-w-[680px]"
-                    style={{ opacity: ready ? 0 : 1 }}
-                  />
-                ) : null}
-
-                <video
-                  ref={videoRef}
-                  className="absolute left-1/2 top-1/2 z-10 h-[70vh] w-full max-w-[520px] -translate-x-1/2 -translate-y-1/2 object-contain md:h-[72vh] md:max-w-[680px]"
-                  style={{
-                    opacity: finalSrc && progress >= showPinsFromProgress ? 0 : closedSrc ? 1 : 1,
-                  }}
-                  preload="metadata"
-                  muted
-                  playsInline
-                  controls={false}
-                  poster={posterSrc}
-                  onError={() => setVideoFailed(true)}
-                >
-                  {webmSrc ? <source src={webmSrc} type="video/webm" /> : null}
-                  {mp4Src ? <source src={mp4Src} type="video/mp4" /> : null}
-                </video>
-              </>
-            ) : null}
-
-            {/* Overlay gradient */}
-            <div className="pointer-events-none absolute inset-0 z-20 bg-gradient-to-b from-black/65 via-black/15 to-black/75" />
-
-            {/* Final frame (component diagram) */}
-            {finalSrc && progress >= showPinsFromProgress ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={finalSrc}
-                alt="Componentes"
-                className="absolute inset-0 z-30 h-full w-full object-contain"
-                style={{ filter: 'drop-shadow(0 30px 120px rgba(0,0,0,0.75))' }}
-              />
-            ) : null}
-          </div>
-
-          {/* Nomes no final (sem desenhar novas linhas/pins — a imagem já tem os indicadores) */}
-          {progress >= showPinsFromProgress ? (
-            <div className="absolute inset-0 z-40">
-              <a
-                href="/catalogo"
-                className="absolute right-6 top-6 rounded-full border border-white/25 bg-white/5 px-6 py-3 text-sm font-extrabold text-white backdrop-blur hover:bg-white/10"
-              >
-                Todos os componentes
-              </a>
-
-              {/* Labels (colados nos indicadores) */}
-              <a
-                href="/componentes/tela"
-                className="absolute left-[25%] top-[28%] -translate-x-1/2 -translate-y-full rounded-full bg-black/35 px-3 py-1 text-sm font-semibold text-white backdrop-blur"
-                style={{ textShadow: '0 2px 18px rgba(0,0,0,0.85)' }}
-              >
-                Tela
-              </a>
-
-              <a
-                href="/componentes/camera-frontal"
-                className="absolute left-[78%] top-[16%] -translate-x-1/2 -translate-y-full rounded-full bg-black/35 px-3 py-1 text-sm font-semibold text-white backdrop-blur"
-                style={{ textShadow: '0 2px 18px rgba(0,0,0,0.85)' }}
-              >
-                Câmera Frontal
-              </a>
-
-              <a
-                href="/componentes/conector"
-                className="absolute left-[10%] top-[82%] -translate-x-1/2 rounded-full bg-black/35 px-3 py-1 text-sm font-semibold text-white backdrop-blur"
-                style={{ textShadow: '0 2px 18px rgba(0,0,0,0.85)' }}
-              >
-                Conector de carga
-              </a>
-
-              <a
-                href="/componentes/bateria"
-                className="absolute left-[54%] top-[70%] -translate-x-1/2 rounded-full bg-black/35 px-3 py-1 text-sm font-semibold text-white backdrop-blur"
-                style={{ textShadow: '0 2px 18px rgba(0,0,0,0.85)' }}
-              >
-                Bateria
-              </a>
-
-              <a
-                href="/componentes/camera-traseira"
-                className="absolute left-[83%] top-[64%] -translate-x-1/2 rounded-full bg-black/35 px-3 py-1 text-sm font-semibold text-white backdrop-blur"
-                style={{ textShadow: '0 2px 18px rgba(0,0,0,0.85)' }}
-              >
-                Câmera traseira
-              </a>
-
-              {/* Click hotspots (transparent) on the circles */}
-              <a
-                href="/componentes/tela"
-                aria-label="Tela"
-                className="absolute left-[25%] top-[33%] h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full"
-              />
-              <a
-                href="/componentes/camera-frontal"
-                aria-label="Câmera Frontal"
-                className="absolute left-[78%] top-[22%] h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full"
-              />
-              <a
-                href="/componentes/conector"
-                aria-label="Conector de carga"
-                className="absolute left-[10%] top-[74%] h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full"
-              />
-              <a
-                href="/componentes/bateria"
-                aria-label="Bateria"
-                className="absolute left-[54%] top-[64%] h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full"
-              />
-              <a
-                href="/componentes/camera-traseira"
-                aria-label="Câmera traseira"
-                className="absolute left-[83%] top-[58%] h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full"
-              />
-            </div>
-          ) : null}
-
-          {/* Copy (só aparece depois de começar a animação; some quando chegam os pins) */}
-          <div
-            className="absolute inset-0 flex items-end transition-opacity duration-300"
-            style={{
-              opacity: progress < showCopyFromProgress ? 0 : progress >= showPinsFromProgress - 0.02 ? 0 : 1,
-            }}
-          >
-            <div className="w-full p-6 md:p-10">
-              <div className="mx-auto max-w-6xl">
-                <div className="grid gap-6 md:grid-cols-2 md:items-end">
-                  <div>
-                    <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-slate-200">
-                      Atacado • Lojistas • Assistências
-                    </div>
-                    <h1 className="mt-5 text-3xl font-extrabold tracking-tight text-white sm:text-5xl">
-                      {overlayTitle}
-                    </h1>
-                    <p className="mt-3 text-sm text-slate-200 sm:text-base">{overlaySubtitle}</p>
-                  </div>
-
-                  <div className="hidden md:block" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Mobile pins list (no final). Desktop pins ficam sobre o aparelho (dentro do card). */}
-        {progress >= showPinsFromProgress ? (
-          <div className="mx-auto mt-4 max-w-6xl px-2 md:hidden">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <div className="text-xs font-semibold uppercase tracking-wide text-yellow-300">Componentes</div>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                {sortedFeatures.map((f) => (
-                  <a
-                    key={f.title}
-                    href={`/componentes/${encodeURIComponent(f.title.toLowerCase())}`}
-                    className="rounded-full border border-white/10 bg-black/25 px-4 py-2 text-center text-sm font-semibold text-slate-100"
-                  >
-                    {f.title}
-                  </a>
-                ))}
-              </div>
-              {videoFailed ? (
-                <div className="mt-3 text-xs text-slate-300/80">
-                  (Seu navegador pode estar bloqueando o vídeo. A imagem de capa continua funcionando.)
-                </div>
-              ) : null}
-            </div>
           </div>
         ) : (
+          <div className="relative overflow-hidden rounded-3xl border border-slate-800 bg-black shadow-[0_30px_120px_rgba(0,0,0,0.75)]">
+            <div className="relative flex h-[60vh] items-center justify-center md:h-[72vh]">
+              {closedSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={closedImageSrc}
+                  alt="Fechado"
+                  onLoad={() => setClosedReady(true)}
+                  className="absolute left-1/2 top-1/2 z-10 h-[48vh] w-auto max-w-[360px] -translate-x-1/2 -translate-y-1/2 object-contain md:h-[60vh] md:max-w-[680px]"
+                  style={{
+                    opacity: clamp01(1 - clamp01(progress / openFromProgress)),
+                    transform: `translate(-50%, -50%) scale(${1 + Math.max(0, openFromProgress - progress) * 0.6})`,
+                    filter: 'drop-shadow(0 30px 120px rgba(0,0,0,0.75))',
+                  }}
+                />
+              ) : null}
+
+              {computedFinalSrc && progress >= showPinsFromProgress ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={computedFinalSrc}
+                  alt="Componentes"
+                  className="absolute inset-0 z-30 h-full w-full object-contain"
+                  style={{ filter: 'drop-shadow(0 30px 120px rgba(0,0,0,0.75))' }}
+                />
+              ) : null}
+            </div>
+
+            <div
+              className="absolute inset-0 flex items-end transition-opacity duration-300"
+              style={{
+                opacity: progress < showCopyFromProgress ? 0 : progress >= showPinsFromProgress - 0.02 ? 0 : 1,
+              }}
+            >
+              <div className="w-full p-4 md:p-8">
+                <div className="mx-auto w-full max-w-4xl px-4 text-center md:text-left">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
+                    Atacado • Lojistas • Assistências
+                  </div>
+                  <h1 className="mt-4 text-2xl leading-tight font-extrabold tracking-tight text-white sm:text-4xl md:text-5xl">
+                    {overlayTitle}
+                  </h1>
+                  <p className="mt-2 text-sm text-slate-200 sm:text-base">{overlaySubtitle}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!prefersReducedMotion && (
           <div className="mx-auto mt-5 max-w-6xl px-2 text-xs text-slate-400">
             Dica: no celular, role devagar para ver a animação com mais suavidade.
           </div>
