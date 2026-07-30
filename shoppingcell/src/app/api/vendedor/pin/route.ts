@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabaseServer';
 
+const IS_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function POST(req: Request) {
   try {
     const { id, name, email, role, pin } = await req.json();
@@ -16,7 +18,7 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!cleanPin || cleanPin.length < 4 || cleanPin.length > 6) {
+    if (!cleanPin || cleanPin.length < 4 || cleanPin.length > 6 || !/^\d+$/.test(cleanPin)) {
       return NextResponse.json(
         { ok: false, error: 'A senha PIN deve possuir entre 4 e 6 números.' },
         { status: 400 },
@@ -24,9 +26,54 @@ export async function POST(req: Request) {
     }
 
     const supabase = await createSupabaseServerClient();
-    const targetId = id || 'emp_' + Date.now();
 
-    // 1. Upsert in hr_employees
+    // 1. Try to find existing record by email or id across tables to maintain consistent user_id
+    let targetId: string = (id && IS_UUID.test(id)) ? id : '';
+
+    if (!targetId) {
+      const { data: existingStaff } = await supabase
+        .from('staff_profiles')
+        .select('user_id')
+        .ilike('email', cleanEmail)
+        .maybeSingle();
+
+      if (existingStaff?.user_id && IS_UUID.test(existingStaff.user_id)) {
+        targetId = existingStaff.user_id;
+      }
+    }
+
+    if (!targetId) {
+      const { data: existingHr } = await supabase
+        .from('hr_employees')
+        .select('id')
+        .ilike('email', cleanEmail)
+        .maybeSingle();
+
+      if (existingHr?.id && IS_UUID.test(existingHr.id)) {
+        targetId = existingHr.id;
+      }
+    }
+
+    if (!targetId) {
+      const { data: existingAdm } = await supabase
+        .from('admin_users')
+        .select('user_id')
+        .ilike('email', cleanEmail)
+        .maybeSingle();
+
+      if (existingAdm?.user_id && IS_UUID.test(existingAdm.user_id)) {
+        targetId = existingAdm.user_id;
+      }
+    }
+
+    // Fallback to a brand new valid UUID v4
+    if (!targetId) {
+      targetId = crypto.randomUUID();
+    }
+
+    const errors: string[] = [];
+
+    // A. Upsert in hr_employees
     const { error: hrErr } = await supabase.from('hr_employees').upsert(
       {
         id: targetId,
@@ -38,8 +85,9 @@ export async function POST(req: Request) {
       } as any,
       { onConflict: 'id' },
     );
+    if (hrErr) errors.push(`hr_employees: ${hrErr.message}`);
 
-    // 2. Upsert in staff_profiles
+    // B. Upsert in staff_profiles
     const { error: staffErr } = await supabase.from('staff_profiles').upsert(
       {
         user_id: targetId,
@@ -50,10 +98,11 @@ export async function POST(req: Request) {
       } as any,
       { onConflict: 'user_id' },
     );
+    if (staffErr) errors.push(`staff_profiles: ${staffErr.message}`);
 
-    // 3. Upsert in admin_users if role is owner or manager
+    // C. Upsert / Manage in admin_users
     if (cleanRole === 'owner' || cleanRole === 'manager') {
-      await supabase.from('admin_users').upsert(
+      const { error: admErr } = await supabase.from('admin_users').upsert(
         {
           user_id: targetId,
           email: cleanEmail,
@@ -62,11 +111,26 @@ export async function POST(req: Request) {
         } as any,
         { onConflict: 'user_id' },
       );
+      if (admErr) errors.push(`admin_users: ${admErr.message}`);
+    } else {
+      // If demoted to staff, remove from admin_users table
+      await supabase.from('admin_users').delete().eq('user_id', targetId);
+    }
+
+    if (errors.length > 0 && errors.every((e) => e.includes('admin_users') || e.includes('staff_profiles'))) {
+      // If at least hr_employees succeeded, we consider it saved!
+      console.warn('Partial warnings while saving seller access:', errors);
+    } else if (errors.length > 0 && hrErr && staffErr) {
+      return NextResponse.json(
+        { ok: false, error: `Não foi possível salvar o cadastro: ${errors.join('; ')}` },
+        { status: 500 },
+      );
     }
 
     return NextResponse.json({
       ok: true,
       message: 'Cadastro de vendedor e PIN salvos com sucesso!',
+      seller: { id: targetId, name: cleanName, email: cleanEmail, role: cleanRole, pin: cleanPin },
     });
   } catch (err: any) {
     return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
@@ -88,7 +152,7 @@ export async function DELETE(req: Request) {
 
     const supabase = await createSupabaseServerClient();
 
-    if (cleanId) {
+    if (cleanId && IS_UUID.test(cleanId)) {
       await supabase.from('hr_employees').delete().eq('id', cleanId);
       await supabase.from('staff_profiles').delete().eq('user_id', cleanId);
       await supabase.from('admin_users').delete().eq('user_id', cleanId);

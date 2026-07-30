@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/app/admin/_components/ui/Button';
 import { Input } from '@/app/admin/_components/ui/Input';
@@ -16,11 +16,12 @@ type SellerUser = {
 };
 
 export function AcessosClient({
-  sellers,
+  sellers: initialSellers,
 }: {
   sellers: SellerUser[];
 }) {
   const router = useRouter();
+  const [sellersList, setSellersList] = useState<SellerUser[]>(initialSellers);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -32,6 +33,10 @@ export function AcessosClient({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  useEffect(() => {
+    setSellersList(initialSellers);
+  }, [initialSellers]);
+
   function resetForm() {
     setEditingId(null);
     setName('');
@@ -39,7 +44,6 @@ export function AcessosClient({
     setRole('staff');
     setPin('');
     setError(null);
-    setSuccess(null);
   }
 
   function startEdit(s: SellerUser) {
@@ -91,7 +95,26 @@ export function AcessosClient({
         return;
       }
 
-      setSuccess(editingId ? 'Cadastro do vendedor atualizado!' : 'Novo vendedor cadastrado com sucesso!');
+      // Optimistic update local list
+      const savedSeller: SellerUser = {
+        id: data.seller?.id || editingId || 'sel_' + Date.now(),
+        name: name.trim() || cleanEmail,
+        email: cleanEmail,
+        role,
+        pin_code: pin,
+      };
+
+      setSellersList((prev) => {
+        const idx = prev.findIndex((x) => x.id === savedSeller.id || x.email.toLowerCase() === cleanEmail);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = savedSeller;
+          return next;
+        }
+        return [savedSeller, ...prev];
+      });
+
+      setSuccess(editingId ? 'Cadastro do vendedor atualizado com sucesso!' : 'Novo vendedor cadastrado com sucesso!');
       resetForm();
       router.refresh();
     } catch (err: any) {
@@ -108,6 +131,7 @@ export function AcessosClient({
 
     setDeletingId(s.id);
     setError(null);
+    setSuccess(null);
 
     try {
       const res = await fetch('/api/vendedor/pin', {
@@ -122,6 +146,7 @@ export function AcessosClient({
         return;
       }
 
+      setSellersList((prev) => prev.filter((x) => x.id !== s.id && x.email.toLowerCase() !== s.email.toLowerCase()));
       setSuccess('Vendedor removido com sucesso!');
       router.refresh();
     } catch (err: any) {
@@ -146,7 +171,7 @@ export function AcessosClient({
               onClick={resetForm}
               className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-white/10"
             >
-              Cancel Edit
+              Cancelar Edição
             </button>
           )}
         </div>
@@ -250,12 +275,12 @@ export function AcessosClient({
         </div>
 
         <div className="mt-4 space-y-3">
-          {sellers.length === 0 ? (
+          {sellersList.length === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-black/30 p-6 text-center text-sm text-slate-400">
               Nenhum vendedor cadastrado ainda. Preencha o formulário acima para adicionar o primeiro vendedor.
             </div>
           ) : (
-            sellers.map((s) => (
+            sellersList.map((s) => (
               <div key={s.id} className="rounded-2xl border border-white/10 bg-black/40 p-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div className="min-w-0">
