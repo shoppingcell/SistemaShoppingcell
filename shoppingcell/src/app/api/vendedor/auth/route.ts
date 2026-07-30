@@ -3,8 +3,16 @@ import { createSupabaseServerClient } from '@/lib/supabaseServer';
 
 export async function POST(req: Request) {
   try {
-    const { pin } = await req.json();
+    const { email, pin } = await req.json();
+    const cleanEmail = String(email || '').trim().toLowerCase();
     const cleanPin = String(pin || '').trim();
+
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      return NextResponse.json(
+        { ok: false, error: 'Por favor, informe um e-mail válido.' },
+        { status: 400 },
+      );
+    }
 
     if (!cleanPin || cleanPin.length < 4 || cleanPin.length > 6) {
       return NextResponse.json(
@@ -15,10 +23,11 @@ export async function POST(req: Request) {
 
     const supabase = await createSupabaseServerClient();
 
-    // 1. Check in staff_profiles
+    // 1. Check in staff_profiles by email & pin_code
     const { data: staff } = await supabase
       .from('staff_profiles')
-      .select('user_id,display_name,role,pin_code')
+      .select('user_id,display_name,email,role,pin_code')
+      .ilike('email', cleanEmail)
       .eq('pin_code', cleanPin)
       .maybeSingle();
 
@@ -27,16 +36,18 @@ export async function POST(req: Request) {
         ok: true,
         seller: {
           id: staff.user_id,
-          name: staff.display_name,
+          name: staff.display_name || cleanEmail,
+          email: staff.email || cleanEmail,
           role: staff.role || 'staff',
         },
       });
     }
 
-    // 2. Fallback check in hr_employees
+    // 2. Check in hr_employees by email & pin_code
     const { data: emp } = await supabase
       .from('hr_employees')
-      .select('id,name,role,pin_code')
+      .select('id,name,email,role,pin_code')
+      .ilike('email', cleanEmail)
       .eq('pin_code', cleanPin)
       .maybeSingle();
 
@@ -46,15 +57,17 @@ export async function POST(req: Request) {
         seller: {
           id: emp.id,
           name: emp.name,
+          email: emp.email || cleanEmail,
           role: 'staff',
         },
       });
     }
 
-    // 3. Fallback check in admin_users
+    // 3. Check in admin_users by email & pin_code
     const { data: adm } = await supabase
       .from('admin_users')
-      .select('user_id,role,pin_code')
+      .select('user_id,email,role,pin_code')
+      .ilike('email', cleanEmail)
       .eq('pin_code', cleanPin)
       .maybeSingle();
 
@@ -63,14 +76,15 @@ export async function POST(req: Request) {
         ok: true,
         seller: {
           id: adm.user_id,
-          name: 'Administrador',
+          name: adm.email || 'Administrador',
+          email: adm.email,
           role: adm.role || 'owner',
         },
       });
     }
 
     return NextResponse.json(
-      { ok: false, error: 'PIN de acesso incorreto ou vendedor não encontrado.' },
+      { ok: false, error: 'E-mail ou PIN de acesso incorretos.' },
       { status: 401 },
     );
   } catch (err: any) {
