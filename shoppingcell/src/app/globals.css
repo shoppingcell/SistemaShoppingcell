@@ -1,69 +1,55 @@
 @import 'tailwindcss';
 
 :root {
-  --background: #000000;
-  --foreground: #f8fafc;
+  --background: #050505;
+  --foreground: #fafafa;
+  --accent: #fbbf24;
+  --site-header-h: 80px;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-manrope);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; background: var(--background); }
 body {
-  background:
-    radial-gradient(circle at top left, rgba(34, 211, 238, 0.12), transparent 28%),
-    linear-gradient(135deg, #020617 0%, #030712 100%);
-  color: var(--foreground);
   min-height: 100vh;
+  margin: 0;
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at 80% -10%, rgba(245, 158, 11, 0.08), transparent 30%),
+    #050505;
+  color: var(--foreground);
+}
+button, a, input, textarea { -webkit-tap-highlight-color: transparent; }
+button, a { transition-property: color, background-color, border-color, opacity, transform, box-shadow; transition-duration: 180ms; }
+::selection { background: rgba(251, 191, 36, 0.35); color: white; }
+
+@layer components {
+  .surface { @apply rounded-3xl border border-white/[0.08] bg-white/[0.035]; }
+  .surface-hover { @apply transition duration-300 hover:-translate-y-1 hover:border-amber-400/25 hover:bg-white/[0.055]; }
+  .eyebrow { @apply inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.24em] text-amber-400; }
+  .button-primary { @apply inline-flex items-center justify-center gap-2 rounded-full bg-amber-400 font-extrabold text-black shadow-[0_12px_40px_rgba(251,191,36,0.16)] hover:-translate-y-0.5 hover:bg-amber-300; }
+  .button-secondary { @apply inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/[0.04] font-bold text-white hover:-translate-y-0.5 hover:border-white/30 hover:bg-white/[0.08]; }
+  .nav-link { @apply rounded-full px-4 py-2 text-sm font-semibold text-zinc-400 hover:bg-white/[0.06] hover:text-white; }
+  .field { @apply w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3.5 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-amber-400/50 focus:ring-4 focus:ring-amber-400/10; }
 }
 
-::selection {
-  background: rgba(34, 211, 238, 0.35);
-  color: #f8fafc;
-}
+@keyframes float-soft { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes shimmer-slide { 0% { transform: translateX(-30%); } 100% { transform: translateX(30%); } }
+@keyframes spin-around { to { transform: rotate(1turn); } }
+@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(calc(-100% - var(--gap))); } }
+@keyframes review-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.animate-float-soft { animation: float-soft 5s ease-in-out infinite; }
+.animate-shimmer-slide { animation: shimmer-slide var(--speed, 3s) linear infinite; }
+.animate-spin-around { animation: spin-around var(--speed, 3s) linear infinite; }
+.animate-marquee { animation: marquee var(--duration, 40s) linear infinite; }
+.review-marquee { animation: review-marquee 48s linear infinite; }
 
-@keyframes shimmer-slide {
-  0% {
-    transform: translateX(-30%);
-  }
-  100% {
-    transform: translateX(30%);
-  }
-}
-
-@keyframes spin-around {
-  to {
-    transform: rotate(1turn);
-  }
-}
-
-.animate-shimmer-slide {
-  animation: shimmer-slide var(--speed, 3s) linear infinite;
-}
-
-.animate-spin-around {
-  animation: spin-around var(--speed, 3s) linear infinite;
-}
-
-@keyframes marquee {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(calc(-100% - var(--gap)));
-  }
-}
-
-.animate-marquee {
-  animation: marquee var(--duration, 40s) linear infinite;
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }

@@ -47,6 +47,7 @@ export default function EditarProdutoPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   // Variants (colors)
   const [variants, setVariants] = useState<Variant[]>([]);
@@ -215,34 +216,39 @@ export default function EditarProdutoPage() {
 
     setSaving(true);
     setError(null);
+    setSuccess(null);
 
     const parsedPrice = priceText.trim() ? Number(priceText.replace(',', '.')) : null;
     const parsedCost = costText.trim() ? Number(costText.replace(',', '.')) : null;
 
-    const { error } = await supabase
-      .from('products')
-      .update({
+    const response = await fetch(`/api/admin/products/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         name: p.name,
         slug: p.slug,
         description: p.description,
-        price: parsedPrice,
-        cost_price: parsedCost,
-        // Auto-lock (admin override) when edited
-        price_locked: true,
-        cost_locked: true,
+        price: parsedPrice != null && Number.isFinite(parsedPrice) ? parsedPrice : null,
+        cost_price: parsedCost != null && Number.isFinite(parsedCost) ? parsedCost : null,
         active: p.active,
         category_id: p.category_id,
-        subcategory_id: (p as any).subcategory_id ?? null,
-        featured: Boolean((p as any).featured),
-      } as any)
-      .eq('id', id);
+        subcategory_id: p.subcategory_id ?? null,
+        featured: Boolean(p.featured),
+      }),
+    });
+    const result = await response.json().catch(() => null);
 
-    if (error) {
-      setError(error.message);
+    if (!response.ok || !result?.ok || !result?.product) {
+      setError(result?.error || 'Não foi possível confirmar o salvamento do produto.');
       setSaving(false);
       return;
     }
 
+    const savedProduct = result.product as Product;
+    setP(savedProduct);
+    setPriceText(savedProduct.price != null ? String(Number(savedProduct.price).toFixed(2)) : '');
+    setCostText(savedProduct.cost_price != null ? String(Number(savedProduct.cost_price).toFixed(2)) : '');
+    setSuccess(savedProduct.featured ? 'Produto salvo e confirmado como destaque.' : 'Produto salvo e removido dos destaques.');
     router.refresh();
     setSaving(false);
   }
@@ -535,7 +541,7 @@ export default function EditarProdutoPage() {
             disabled={saving}
             className="rounded-md bg-yellow-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-yellow-400 disabled:opacity-60"
           >
-            Salvar
+            {saving ? 'Salvando…' : 'Salvar'}
           </button>
 
           <button
@@ -549,6 +555,11 @@ export default function EditarProdutoPage() {
         </div>
 
         {error && <div className="text-sm text-red-200">{error}</div>}
+        {success && (
+          <div role="status" className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-200">
+            {success}
+          </div>
+        )}
       </form>
     </div>
   );

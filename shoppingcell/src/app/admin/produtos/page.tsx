@@ -9,6 +9,8 @@ export const dynamic = 'force-dynamic';
 type MediaRow = {
   product_id: string;
   url: string;
+  is_primary: boolean;
+  sort: number;
 };
 
 export default async function ProdutosPage() {
@@ -21,13 +23,18 @@ export default async function ProdutosPage() {
         .select('id,name,slug,price,active,category_id,created_at')
         .order('created_at', { ascending: false }),
       supabase.from('categories').select('id,name').order('sort', { ascending: true }),
-      supabase.from('product_media').select('product_id,url').eq('is_primary', true),
+      supabase
+        .from('product_media')
+        .select('product_id,url,is_primary,sort')
+        .order('is_primary', { ascending: false })
+        .order('sort', { ascending: true }),
     ]);
 
   const catNameById = new Map((categories ?? []).map((c) => [c.id, c.name]));
-  const mediaByProductId = new Map(
-    (media as MediaRow[] | null | undefined)?.map((m) => [m.product_id, m.url]) ?? [],
-  );
+  const mediaByProductId = new Map<string, string>();
+  for (const item of (media as MediaRow[] | null | undefined) ?? []) {
+    if (!mediaByProductId.has(item.product_id)) mediaByProductId.set(item.product_id, item.url);
+  }
 
   return (
     <div className="grid gap-6">

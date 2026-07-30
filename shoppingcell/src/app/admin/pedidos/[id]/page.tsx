@@ -24,6 +24,7 @@ export default function PedidoDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [order, setOrder] = useState<any>(null);
   const [items, setItems] = useState<any[]>([]);
 
@@ -66,7 +67,6 @@ export default function PedidoDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 
@@ -115,16 +115,31 @@ export default function PedidoDetailPage() {
   }
 
   async function confirmOrder() {
+    if (saving) return;
+    setSaving(true);
     setError(null);
-    const res = await fetch(`/api/admin/orders/${id}/confirm`, { method: 'POST' });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok || !json?.ok) {
-      setError(json?.error || 'Falha ao confirmar.');
-      return;
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/admin/orders/${id}/confirm`, { method: 'POST' });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) {
+        setError(json?.error || 'Falha ao confirmar.');
+        return;
+      }
+
+      const adjustments = Array.isArray(json.adjustments) ? json.adjustments : [];
+      setNotice(
+        adjustments.length
+          ? `${adjustments.length} item(ns) foram ajustados ao estoque disponível.`
+          : json.already
+            ? 'Este pedido já estava confirmado.'
+            : 'Pedido confirmado e estoque atualizado.',
+      );
+      await load();
+      router.refresh();
+    } finally {
+      setSaving(false);
     }
-    router.refresh();
-    // reload view state
-    window.location.reload();
   }
 
   async function setPaymentStatus(status: 'paid' | 'pending') {
@@ -156,21 +171,44 @@ export default function PedidoDetailPage() {
     }
 
     const amt = paidAmount.trim() ? Number(paidAmount.replace(',', '.')) : total;
-
-    const { error: txErr } = await supabase.from('finance_transactions').insert({
-      type: 'income',
-      payment_method: paymentMethod,
-      category: paidCategory.trim() || 'Vendas',
-      description: `Pedido ${String(id).slice(0, 8)} (pago)` + ` [${paymentMethod.toUpperCase()}]`,
-      amount: amt,
-      occurred_at: new Date().toISOString(),
-      order_id: id,
-    } as any);
-
-    if (txErr) {
-      setError(txErr.message);
+    if (!Number.isFinite(amt) || amt <= 0) {
+      setError('Informe um valor de pagamento válido e maior que zero.');
       setSaving(false);
       return;
+    }
+
+    // One revenue entry per order. This also prevents a second click or retry
+    // from duplicating income after a successful insert.
+    const { data: existingTx, error: existingTxErr } = await supabase
+      .from('finance_transactions')
+      .select('id')
+      .eq('order_id', id)
+      .eq('type', 'income')
+      .limit(1)
+      .maybeSingle();
+
+    if (existingTxErr) {
+      setError(existingTxErr.message);
+      setSaving(false);
+      return;
+    }
+
+    if (!existingTx) {
+      const { error: txErr } = await supabase.from('finance_transactions').insert({
+        type: 'income',
+        payment_method: paymentMethod,
+        category: paidCategory.trim() || 'Vendas',
+        description: `Pedido ${String(id).slice(0, 8)} (pago) [${paymentMethod.toUpperCase()}]`,
+        amount: amt,
+        occurred_at: new Date().toISOString(),
+        order_id: id,
+      } as any);
+
+      if (txErr) {
+        setError(txErr.message);
+        setSaving(false);
+        return;
+      }
     }
 
     const { error: upErr } = await supabase
@@ -189,7 +227,7 @@ export default function PedidoDetailPage() {
   }
 
   if (loading) return <div className="text-slate-300">Carregando…</div>;
-  if (error) return <div className="text-red-200">Erro: {error}</div>;
+  if (error && !order) return <div className="text-red-200">Erro: {error}</div>;
 
   const paymentStatus = (order as any)?.payment_status ?? 'pending';
 
@@ -227,14 +265,24 @@ export default function PedidoDetailPage() {
                 <Button variant="ghost" onClick={sendWhatsApp}>
                   Enviar no WhatsApp
                 </Button>
-                <Button variant="primary" onClick={confirmOrder}>
-                  Confirmar (baixar estoque)
+                <Button variant="primary" disabled={saving || order?.status === 'confirmed'} onClick={confirmOrder}>
+                  {saving ? 'Confirmando…' : order?.status === 'confirmed' ? 'Pedido confirmado' : 'Confirmar (baixar estoque)'}
                 </Button>
               </div>
             </div>
           </div>
 
           <div className="px-6 py-5">
+            {notice && (
+              <div className="mb-4 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm text-emerald-100">
+                {notice}
+              </div>
+            )}
+            {error && (
+              <div className="mb-4 rounded-2xl border border-red-400/20 bg-red-400/10 p-3 text-sm text-red-100">
+                {error}
+              </div>
+            )}
             <div className="grid gap-2">
               {items.map((it) => (
                 <div

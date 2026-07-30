@@ -1,31 +1,44 @@
 import { NextResponse } from 'next/server';
+
+import { requireAdminOrActiveStaff } from '@/lib/requireAdmin';
 import { createSupabaseServiceClient } from '@/lib/supabaseService';
 
 export async function GET() {
+  const gate = await requireAdminOrActiveStaff();
+  if (!gate.ok) {
+    return NextResponse.json({ ok: false, error: gate.error }, { status: gate.status });
+  }
+
   try {
     const supabase = createSupabaseServiceClient();
-
-    const [{ count: productsCount }, { count: customersCount }] = await Promise.all([
-      supabase.from('products').select('*', { count: 'exact', head: true }),
-      supabase.from('customers').select('*', { count: 'exact', head: true }),
-    ]);
-
     const start = new Date();
     start.setHours(0, 0, 0, 0);
 
-    const { count: ordersTodayCount } = await supabase
-      .from('orders')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', start.toISOString());
+    const [products, customers, ordersToday, inventory] = await Promise.all([
+      supabase.from('products').select('id', { count: 'exact', head: true }),
+      supabase.from('customers').select('id', { count: 'exact', head: true }),
+      supabase.from('orders').select('id', { count: 'exact', head: true }).gte('created_at', start.toISOString()),
+      supabase.from('inventory').select('quantity'),
+    ]);
 
-    // inventory total items
-    const { data: inventoryRows } = await supabase.from('inventory').select('quantity');
-    const inventoryTotal = Array.isArray(inventoryRows)
-      ? inventoryRows.reduce((s, r: any) => s + (r.quantity || 0), 0)
-      : 0;
+    const firstError = products.error ?? customers.error ?? ordersToday.error ?? inventory.error;
+    if (firstError) {
+      return NextResponse.json({ ok: false, error: 'kpi_query_failed' }, { status: 502 });
+    }
 
-    return NextResponse.json({ productsCount: productsCount || 0, customersCount: customersCount || 0, ordersTodayCount: ordersTodayCount || 0, inventoryTotal });
-  } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    const inventoryTotal = (inventory.data ?? []).reduce(
+      (sum, row) => sum + Number(row.quantity ?? 0),
+      0,
+    );
+
+    return NextResponse.json({
+      ok: true,
+      productsCount: products.count ?? 0,
+      customersCount: customers.count ?? 0,
+      ordersTodayCount: ordersToday.count ?? 0,
+      inventoryTotal,
+    });
+  } catch {
+    return NextResponse.json({ ok: false, error: 'kpi_unavailable' }, { status: 500 });
   }
 }

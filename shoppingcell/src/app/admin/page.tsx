@@ -61,16 +61,16 @@ export default async function AdminHome() {
   const today0 = startOfDay(now);
 
   const [
-    { data: products },
-    { data: inventory },
-    { data: moves },
-    { data: txs },
-    { data: ordersConfirmedToday },
-    { data: ordersConfirmed7 },
-    { data: ordersConfirmed30 },
+    { data: products, error: productsError },
+    { data: inventory, error: inventoryError },
+    { data: moves, error: movesError },
+    { data: txs, error: transactionsError },
+    { data: ordersConfirmedToday, error: ordersTodayError },
+    { data: ordersConfirmed7, error: orders7Error },
+    { data: ordersConfirmed30, error: orders30Error },
   ] = await Promise.all([
-    supabase.from('products').select('id,active,price,cost_price,price_locked,cost_locked'),
-    supabase.from('inventory').select('product_id,quantity,min_quantity,quantity_locked,min_locked'),
+    supabase.from('products').select('id,active,price,cost_price'),
+    supabase.from('inventory').select('product_id,quantity,min_quantity'),
     supabase
       .from('inventory_moves')
       .select('id,product_id,delta,reason,created_at')
@@ -97,6 +97,16 @@ export default async function AdminHome() {
       .eq('status', 'confirmed')
       .gte('created_at', since30.toISOString()),
   ]);
+
+  const queryErrors = [
+    productsError,
+    inventoryError,
+    movesError,
+    transactionsError,
+    ordersTodayError,
+    orders7Error,
+    orders30Error,
+  ].filter(Boolean);
 
   const productCount = (products ?? []).length;
   const activeCount = (products ?? []).filter((p) => p.active).length;
@@ -125,7 +135,6 @@ export default async function AdminHome() {
       : withMargin.reduce((acc: number, p: any) => acc + (Number(p.price) - Number(p.cost_price)), 0) /
         withMargin.length;
 
-  const lockedCount = (products ?? []).filter((p: any) => p.price_locked || p.cost_locked).length;
 
   const incomeToday = (txs ?? [])
     .filter((t: any) => t.type === 'income' && new Date(t.occurred_at) >= today0)
@@ -166,6 +175,14 @@ export default async function AdminHome() {
 
   return (
     <div className="grid gap-6">
+      {queryErrors.length > 0 ? (
+        <div className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.07] p-4 text-sm text-amber-100">
+          <div className="font-bold">Alguns indicadores não puderam ser carregados.</div>
+          <div className="mt-1 text-xs leading-5 text-amber-200/70">
+            {queryErrors.map((error: any) => error?.message).filter(Boolean).join(' • ')}
+          </div>
+        </div>
+      ) : null}
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div>
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Overview</div>
@@ -260,7 +277,7 @@ export default async function AdminHome() {
               <div className="mt-2 text-2xl font-extrabold text-slate-100">
                 {avgMargin == null ? '—' : money(avgMargin)}
               </div>
-              <div className="mt-1 text-xs text-slate-500">Itens travados manual: {lockedCount}</div>
+              <div className="mt-1 text-xs text-slate-500">Produtos com preço e custo informados: {withMargin.length}</div>
             </div>
           </div>
         </PremiumCard>

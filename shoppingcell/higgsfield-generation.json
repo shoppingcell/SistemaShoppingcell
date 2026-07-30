@@ -1,0 +1,24 @@
+{
+  "status": "completed",
+  "model": "seedance_2_0",
+  "job_id": "e44f6706-b069-46e8-8331-85dca5d0be5d",
+  "cost_credits": 45,
+  "source_url": "https://d8j0ntlcm91z4.cloudfront.net/user_38t6NU16SgSTY5CJRgxAkVeYstK/hf_20260728_000855_e44f6706-b069-46e8-8331-85dca5d0be5d.mp4",
+  "duration_seconds": 5.042,
+  "resolution": {
+    "width": 1920,
+    "height": 1080,
+    "aspect_ratio": "16:9"
+  },
+  "codec": "h264",
+  "audio": false,
+  "final_path": "G:/shoppingcell/SistemaShoppingcell/shoppingcell/public/hero/higgsfield-phone-open.mp4",
+  "inputs": {
+    "start_frame": "G:/shoppingcell/SistemaShoppingcell/shoppingcell/public/hero/sequence/frame_001.webp",
+    "end_frame": "G:/shoppingcell/SistemaShoppingcell/shoppingcell/public/hero/sequence/frame_026.webp"
+  },
+  "validation": {
+    "tool": "ffprobe",
+    "result": "passed"
+  }
+}

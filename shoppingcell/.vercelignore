@@ -1,0 +1,14 @@
+.git/
+.next/
+node_modules/
+.env
+.env.*
+!.env.example
+.local-backups/
+*.log
+Novo(a) Documento de Texto.txt
+nul
+higgsfield-generation.json
+supabase/Novo(a) Documento de Texto.txt
+supabase/Novo(a) Documento de Texto (2).txt
+supabase/Novo(a) Documento de Texto (3).txt

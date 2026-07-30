@@ -23,7 +23,7 @@ export default function DashboardKpis() {
         if (!res.ok) return;
         const json = await res.json();
         setKpis(json as KpiResp);
-      } catch (e) {
+      } catch {
         // ignore
       }
     })();

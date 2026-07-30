@@ -258,7 +258,7 @@ export async function POST(req: Request) {
 
   const { data: existingInv, error: invReadErr } = await service
     .from('inventory')
-    .select('product_id,quantity_locked,min_locked');
+    .select('product_id,quantity,min_quantity,quantity_locked,min_locked');
 
   if (invReadErr)
     return NextResponse.json(
@@ -288,9 +288,16 @@ export async function POST(req: Request) {
       continue;
     }
 
-    const patch: any = { product_id, updated_at: new Date().toISOString() };
-    if (!locks.quantity_locked) patch.quantity = p.quantity ?? 0;
-    if (!locks.min_locked) patch.min_quantity = p.min_quantity ?? 0;
+    const patch: any = {
+      product_id,
+      updated_at: new Date().toISOString(),
+      // Locked values must be sent back unchanged. Omitting them and filling
+      // missing fields with zero below used to erase manually protected stock.
+      quantity: locks.quantity_locked ? Number(locks.quantity ?? 0) : (p.quantity ?? 0),
+      min_quantity: locks.min_locked ? Number(locks.min_quantity ?? 0) : (p.min_quantity ?? 0),
+      quantity_locked: Boolean(locks.quantity_locked),
+      min_locked: Boolean(locks.min_locked),
+    };
     invUpserts.push(patch);
   }
 
@@ -318,7 +325,6 @@ export async function POST(req: Request) {
       inventory: invUpserts.length,
     },
     notes: {
-      sheetCsvUrl,
       hasCostColumn: iCusto !== -1,
       hasMinStockColumn: iMin !== -1,
       mode: 'admin_can_override_auto_lock',

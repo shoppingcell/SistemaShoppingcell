@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   description:
     'Peças de reposição Apple genuínas para revenda. Qualidade premium para assistências técnicas e revendedores.',
   icons: {
-    icon: '/favicon.png',
+    icon: '/icon.svg',
   },
 };
 

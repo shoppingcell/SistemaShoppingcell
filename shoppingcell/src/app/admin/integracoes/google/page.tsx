@@ -61,7 +61,7 @@ export default async function GoogleIntegracaoPage({
         <div className="font-semibold">Observação</div>
         <p className="mt-2">
           Seu OAuth Client precisa ter a Redirect URI cadastrada como:
-          <code className="ml-2 text-slate-200">https://vendedoria.xyz/api/google/oauth/callback</code>
+          <code className="ml-2 text-slate-200">https://www.shoppingcell.tech/api/google/oauth/callback</code>
         </p>
       </div>
     </div>

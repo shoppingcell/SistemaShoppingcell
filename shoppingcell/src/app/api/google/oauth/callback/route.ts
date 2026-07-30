@@ -2,16 +2,18 @@ import { NextResponse } from 'next/server';
 import { getGoogleOAuthClient } from '@/lib/googleAuth';
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
+  const requestUrl = new URL(request.url);
+  const { searchParams } = requestUrl;
+  const origin = requestUrl.origin;
   const code = searchParams.get('code');
   const error = searchParams.get('error');
 
   if (error) {
-    return NextResponse.redirect(new URL(`/admin/integracoes/google?status=error&msg=${encodeURIComponent(error)}`, 'https://vendedoria.xyz'));
+    return NextResponse.redirect(new URL(`/admin/integracoes/google?status=error&msg=${encodeURIComponent(error)}`, origin));
   }
 
   if (!code) {
-    return NextResponse.redirect(new URL('/admin/integracoes/google?status=error&msg=missing_code', 'https://vendedoria.xyz'));
+    return NextResponse.redirect(new URL('/admin/integracoes/google?status=error&msg=missing_code', origin));
   }
 
   const oauth2 = getGoogleOAuthClient();
@@ -21,7 +23,7 @@ export async function GET(request: Request) {
   // We show the refresh_token once so the user can paste it into the server .env.
   const refresh = tokens.refresh_token;
 
-  const url = new URL('/admin/integracoes/google', 'https://vendedoria.xyz');
+  const url = new URL('/admin/integracoes/google', origin);
   if (refresh) {
     url.searchParams.set('status', 'ok');
     url.searchParams.set('refresh_token', refresh);

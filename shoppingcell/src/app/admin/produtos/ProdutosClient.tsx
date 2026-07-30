@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
+import { Play } from 'lucide-react';
 import { Panel } from '@/app/admin/_components/ui/Panel';
 import { EmptyState } from '@/app/admin/_components/ui/EmptyState';
 
@@ -19,6 +20,8 @@ function money(n: number | null | undefined) {
   if (n == null || Number.isNaN(Number(n))) return '—';
   return `R$ ${Number(n).toFixed(2)}`;
 }
+
+const isVideo = (url?: string | null) => Boolean(url && /\.(mp4|webm|mov|m4v)(?:[?#].*)?$/i.test(url));
 
 export function ProdutosClient({ products }: { products: ProductRow[] }) {
   const [view, setView] = useState<'cards' | 'table'>('cards');
@@ -137,23 +140,24 @@ export function ProdutosClient({ products }: { products: ProductRow[] }) {
                 key={p.id}
                 className="group relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-slate-950 to-slate-950/60 shadow-[0_10px_40px_rgba(0,0,0,0.35)]"
               >
-                <div className="aspect-[4/3] w-full bg-slate-900/40">
+                <div className="relative aspect-[4/3] w-full bg-slate-900/40">
                   {p.imageUrl ? (
                     <div className="flex h-full w-full items-center justify-center bg-slate-900/40 p-2">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={p.imageUrl}
-                        alt={p.name}
-                        className="h-full w-full object-contain opacity-95"
-                      />
+                      {isVideo(p.imageUrl) ? (
+                        <video src={p.imageUrl} muted playsInline loop autoPlay preload="metadata" aria-label={`Vídeo de ${p.name}`} className="h-full w-full object-contain opacity-95" />
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={p.imageUrl} alt={p.name} className="h-full w-full object-contain opacity-95" />
+                      )}
                     </div>
                   ) : (
                     <div className="flex h-full w-full items-center justify-center">
                       <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-slate-400">
-                        Sem imagem
+                        Sem mídia
                       </div>
                     </div>
                   )}
+                  {isVideo(p.imageUrl) && <span className="absolute bottom-3 left-3 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/75 px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-wider text-white backdrop-blur"><Play size={10} fill="currentColor" /> Vídeo</span>}
                 </div>
 
                 <div className="p-5">
@@ -218,6 +222,7 @@ export function ProdutosClient({ products }: { products: ProductRow[] }) {
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
               <tr className="border-b border-white/10">
+                <th className="px-6 py-4">Mídia</th>
                 <th className="px-6 py-4">Nome</th>
                 <th className="px-6 py-4">Categoria</th>
                 <th className="px-6 py-4">Preço</th>
@@ -228,6 +233,21 @@ export function ProdutosClient({ products }: { products: ProductRow[] }) {
             <tbody>
               {filtered.map((p) => (
                 <tr key={p.id} className="border-b border-white/5 hover:bg-white/5">
+                  <td className="px-6 py-3">
+                    <Link href={`/admin/produtos/${p.id}/midia`} className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-slate-950" aria-label={`Gerenciar mídia de ${p.name}`}>
+                      {p.imageUrl ? (
+                        isVideo(p.imageUrl) ? (
+                          <>
+                            <video src={p.imageUrl} muted playsInline preload="metadata" className="h-full w-full object-contain" />
+                            <span className="absolute bottom-1 left-1 rounded bg-black/75 px-1 py-0.5 text-[7px] font-black text-white">VÍDEO</span>
+                          </>
+                        ) : (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={p.imageUrl} alt={p.name} className="h-full w-full object-contain" />
+                        )
+                      ) : <span className="text-center text-[9px] font-semibold leading-3 text-slate-500">Sem mídia</span>}
+                    </Link>
+                  </td>
                   <td className="px-6 py-4 font-semibold text-slate-100">{p.name}</td>
                   <td className="px-6 py-4 text-slate-300">{p.categoryName || '—'}</td>
                   <td className="px-6 py-4 text-slate-300">{money(p.price)}</td>

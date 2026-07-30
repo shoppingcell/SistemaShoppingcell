@@ -95,9 +95,9 @@ export default async function AcessosPage() {
 
   const map = new Map<string, SellerUser>();
 
-  // 1. Processa seller_access (tabela nova)
-  for (const s of (sellerAccess as any[]) ?? []) {
-    const key = s.id || s.email || 'sa_' + Math.random();
+  // 1. Processa seller_accounts
+  ((sellerAccess as any[]) ?? []).forEach((s, idx) => {
+    const key = s.id || s.email || `sa_${idx}`;
     map.set(key, {
       id: s.id || key,
       name: s.name || s.email || 'Vendedor',
@@ -105,15 +105,15 @@ export default async function AcessosPage() {
       role: s.role || 'staff',
       pin_code: s.pin_code || null,
     });
-  }
+  });
 
   // 2. Processa list_admin_users RPC (Usuários Admin do Auth Supabase)
-  for (const adm of (rawAdmins as any[]) ?? []) {
+  ((rawAdmins as any[]) ?? []).forEach((adm, idx) => {
     const emailLower = (adm.email || '').toLowerCase();
     const existingKey = Array.from(map.keys()).find(
       (k) => map.get(k)?.email.toLowerCase() === emailLower,
     );
-    const key = existingKey || adm.user_id || adm.email || 'adm_' + Math.random();
+    const key = existingKey || adm.user_id || adm.email || `adm_${idx}`;
     const existing = map.get(key);
 
     map.set(key, {
@@ -123,15 +123,15 @@ export default async function AcessosPage() {
       role: adm.role || existing?.role || 'owner',
       pin_code: adm.pin_code || existing?.pin_code || null,
     });
-  }
+  });
 
   // 3. Processa hr_employees (Funcionários cadastrados no RH)
-  for (const emp of (hrEmployees as any[]) ?? []) {
+  ((hrEmployees as any[]) ?? []).forEach((emp, idx) => {
     const emailLower = (emp.email || '').toLowerCase();
     const existingKey = Array.from(map.keys()).find(
       (k) => emailLower && map.get(k)?.email.toLowerCase() === emailLower,
     );
-    const key = existingKey || emp.id || 'emp_' + Math.random();
+    const key = existingKey || emp.id || `emp_${idx}`;
     const existing = map.get(key);
 
     map.set(key, {
@@ -141,15 +141,15 @@ export default async function AcessosPage() {
       role: emp.role || existing?.role || 'vendedor',
       pin_code: emp.pin_code || existing?.pin_code || null,
     });
-  }
+  });
 
   // 4. Processa staff_profiles
-  for (const st of (staffProfiles as any[]) ?? []) {
+  ((staffProfiles as any[]) ?? []).forEach((st, idx) => {
     const emailLower = (st.email || '').toLowerCase();
     const existingKey = Array.from(map.keys()).find(
       (k) => emailLower && map.get(k)?.email.toLowerCase() === emailLower,
     );
-    const key = existingKey || st.user_id || 'st_' + Math.random();
+    const key = existingKey || st.user_id || `st_${idx}`;
     const existing = map.get(key);
 
     map.set(key, {
@@ -159,7 +159,7 @@ export default async function AcessosPage() {
       role: st.role || existing?.role || 'staff',
       pin_code: st.pin_code || existing?.pin_code || null,
     });
-  }
+  });
 
   const sellers = Array.from(map.values());
 

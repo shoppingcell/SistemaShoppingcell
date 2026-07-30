@@ -9,6 +9,7 @@
     "lint": "eslint src",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
     "prepare": "husky"
   },
   "dependencies": {

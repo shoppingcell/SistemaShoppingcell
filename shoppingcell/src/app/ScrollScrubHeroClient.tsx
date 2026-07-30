@@ -1,420 +1,190 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowDown, Box, Camera, Smartphone, Zap } from 'lucide-react';
 
-const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
+const clamp = (value: number) => Math.min(1, Math.max(0, value));
 
-type Feature = {
-  title: string;
-  desc: string;
-  // 0..1 progress range where this feature is active
-  at: number;
-};
+type Feature = { title: string; desc: string; at: number };
 
-export function ScrollScrubHeroClient(props: {
-  // We can scrub either a video OR an image sequence.
-  mp4Src?: string;
-  webmSrc?: string;
-  posterSrc?: string;
-
-  framesDir?: string; // e.g. "/hero/frames"
-  frameCount?: number; // e.g. 26
-
-  closedSrc?: string; // image used before the "open" animation starts
-  finalSrc?: string; // image used at the end (component diagram)
-
-  heightVh?: number; // total scroll area
-  stickyTopPx?: number;
-  features?: Feature[];
+export function ScrollScrubHeroClient({
+  framesDir = '/hero/higgsfield-sequence',
+  frameCount = 49,
+  fallbackFramesDir = '/hero/sequence',
+  fallbackFrameCount = 26,
+  frameExtension = 'webp',
+  heightVh = 260,
+  openFromProgress = 0.08,
+  overlayTitle = 'Peças que movimentam o seu negócio.',
+  overlaySubtitle = 'Role para explorar a estrutura de um iPhone e descobrir o padrão Shopping Cell.',
+  features = [
+    { title: 'Tela', desc: 'Módulos selecionados para reposição profissional.', at: 0.18 },
+    { title: 'Bateria', desc: 'Peças de alto giro para assistências e lojistas.', at: 0.42 },
+    { title: 'Câmeras', desc: 'Componentes frontais e traseiros para manutenção.', at: 0.66 },
+    { title: 'Conectores', desc: 'Flex e conectores para completar o seu estoque.', at: 0.84 },
+  ],
+}: {
+  framesDir?: string;
+  frameCount?: number;
+  fallbackFramesDir?: string;
+  fallbackFrameCount?: number;
+  frameExtension?: string;
+  heightVh?: number;
+  openFromProgress?: number;
   overlayTitle?: string;
   overlaySubtitle?: string;
-  showCopyFromProgress?: number; // hide copy until progress reaches this point
-  showPinsFromProgress?: number; // show pins near the end
-  openFromProgress?: number; // start opening animation after this progress
-  // Controls for animation feel
-  smoothFactor?: number; // 0..1, higher = faster smoothing of video seek (default 0.22)
-  easePower?: number; // easing power applied to open progress (default 1.05)
-  throttleSensitivity?: number; // minimal progress delta to update state (default 0.0015)
+  features?: Feature[];
 }) {
-  const {
-    mp4Src,
-    webmSrc,
-    posterSrc,
-    framesDir,
-    frameCount = 0,
-    closedSrc,
-    finalSrc,
-    heightVh = 140,
-    stickyTopPx,
-    features = [
-      { title: 'Tela', desc: 'Peças e módulos premium para reposição.', at: 0.15 },
-      { title: 'Bateria', desc: 'Alta demanda e giro no atacado.', at: 0.45 },
-      { title: 'Câmera', desc: 'Módulos e componentes selecionados.', at: 0.7 },
-      { title: 'Conector', desc: 'Flex e conectores para manutenção.', at: 0.9 },
-    ],
-    overlayTitle = 'Peças de iPhone no atacado',
-    overlaySubtitle = 'Role a página: o iPhone se expande e mostra os detalhes.',
-    showCopyFromProgress = 0.12,
-    showPinsFromProgress = 0.82,
-    // keep the device closed "floating" for the first part of the scroll
-    openFromProgress = 0.12,
-    smoothFactor = 0.28,
-    easePower = 1.05,
-    throttleSensitivity = 0.0015,
-  } = props;
-
   const sectionRef = useRef<HTMLElement | null>(null);
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
-  const [stickyTop, setStickyTop] = useState<number>(typeof stickyTopPx === 'number' ? stickyTopPx : 96);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [frameIndex, setFrameIndex] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const [sequenceFallback, setSequenceFallback] = useState(false);
 
-  const targetTimeRef = useRef<number>(0);
-  const currentTimeRef = useRef<number>(0);
-  const [duration, setDuration] = useState<number>(0);
-  const [progress, setProgress] = useState<number>(0);
-  const [ready, setReady] = useState(false);
-  const [videoFailed, setVideoFailed] = useState(false);
-  const [framesReady, setFramesReady] = useState(false);
-  const [closedReady, setClosedReady] = useState(!closedSrc);
-  const [didInitialTick, setDidInitialTick] = useState(false);
+  const effectiveFrameCount = sequenceFallback ? fallbackFrameCount : frameCount;
 
-  const sortedFeatures = useMemo(() => [...features].sort((a, b) => a.at - b.at), [features]);
+  const frameSrc = useCallback(
+    (index: number) => `${sequenceFallback ? fallbackFramesDir : framesDir}/frame_${String(index + 1).padStart(3, '0')}.${frameExtension}`,
+    [fallbackFramesDir, frameExtension, framesDir, sequenceFallback],
+  );
 
-  // Preload frames if using image sequence
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'matchMedia' in window) {
-      const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-      setPrefersReducedMotion(mq.matches);
-      const handler = () => setPrefersReducedMotion(mq.matches);
-      mq.addEventListener?.('change', handler);
-      return () => mq.removeEventListener?.('change', handler);
-    }
-    return undefined;
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const syncMotion = () => setReducedMotion(media.matches);
+    syncMotion();
+    media.addEventListener?.('change', syncMotion);
+    return () => media.removeEventListener?.('change', syncMotion);
   }, []);
 
   useEffect(() => {
-    if (!framesDir || !frameCount || frameCount < 2) {
-      return;
-    }
-
+    const eager = Array.from({ length: Math.min(8, effectiveFrameCount) }, (_, index) => frameSrc(index));
+    let done = 0;
     let cancelled = false;
-    let loaded = 0;
+    eager.forEach((src) => {
+      const image = new Image();
+      const finish = () => {
+        done += 1;
+        if (!cancelled && done >= Math.min(3, eager.length)) setLoaded(true);
+      };
+      image.onload = finish;
+      image.onerror = () => {
+        if (!sequenceFallback && !cancelled) setSequenceFallback(true);
+        finish();
+      };
+      image.src = src;
+    });
 
-    const sources: string[] = [];
-    for (let i = 1; i <= frameCount; i++) {
-      const isLast = i === frameCount;
-      // last frame can be overridden via finalSrc
-      if (isLast && finalSrc) {
-        sources.push(finalSrc);
-      } else {
-        sources.push(`${framesDir}/frame_${String(i).padStart(3, '0')}.jpg`);
+    const preloadRest = window.setTimeout(() => {
+      for (let index = eager.length; index < effectiveFrameCount; index += 1) {
+        const image = new Image();
+        image.src = frameSrc(index);
       }
-    }
-
-    // Load first few frames quickly, then progressively load the rest to avoid blocking
-    const eagerLoadCount = Math.min(frameCount, 8);
-    const loadImg = (src: string) =>
-      new Promise<void>((resolve) => {
-        const img = new Image();
-        img.onload = () => resolve();
-        img.onerror = () => resolve();
-        img.src = src;
-      });
-
-    (async () => {
-      try {
-        // eager load first frames
-        for (let i = 0; i < eagerLoadCount; i++) {
-          if (cancelled) return;
-          await loadImg(sources[i]);
-          loaded += 1;
-          if (loaded >= Math.min(frameCount, 6)) {
-            setFramesReady(true);
-            setReady(true);
-          }
-        }
-
-        // progressively load remaining frames in background
-        for (let i = eagerLoadCount; i < sources.length; i++) {
-          if (cancelled) return;
-          // small delay between background loads
-          // eslint-disable-next-line no-await-in-loop
-          await new Promise((r) => setTimeout(r, 120));
-          // eslint-disable-next-line no-await-in-loop
-          await loadImg(sources[i]);
-        }
-      } catch {
-        if (!cancelled) setFramesReady(false);
-      }
-    })();
+    }, 700);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(preloadRest);
     };
-  }, [framesDir, frameCount, finalSrc]);
+  }, [effectiveFrameCount, frameSrc, sequenceFallback]);
 
-  // Pause animations when section is not visible (save CPU)
   useEffect(() => {
     const section = sectionRef.current;
     if (!section) return;
-    let mounted = true;
-    const obs = new IntersectionObserver(
-      (entries) => {
-        if (!mounted) return;
-        for (const e of entries) {
-          if (e.isIntersecting) {
-            // resume
-            setDidInitialTick((v) => v);
-          } else {
-            // when not visible, no-op: loops check visibility via getBoundingClientRect
-          }
-        }
-      },
-      { threshold: 0.1 },
-    );
-    obs.observe(section);
+    let raf = 0;
+
+    const update = () => {
+      const rect = section.getBoundingClientRect();
+      const scrollable = Math.max(1, rect.height - window.innerHeight);
+      setProgress(clamp(-rect.top / scrollable));
+      raf = 0;
+    };
+
+    const requestUpdate = () => {
+      if (!raf) raf = window.requestAnimationFrame(update);
+    };
+
+    update();
+    window.addEventListener('scroll', requestUpdate, { passive: true });
+    window.addEventListener('resize', requestUpdate);
     return () => {
-      mounted = false;
-      obs.disconnect();
+      window.removeEventListener('scroll', requestUpdate);
+      window.removeEventListener('resize', requestUpdate);
+      if (raf) window.cancelAnimationFrame(raf);
     };
   }, []);
 
-  // derive useful computed sources
-  const closedImageSrc = closedSrc ?? (framesDir && frameCount ? `${framesDir}/frame_001.jpg` : posterSrc);
-  const computedFinalSrc = finalSrc ?? (framesDir && frameCount ? `${framesDir}/frame_${String(frameCount).padStart(3, '0')}.jpg` : finalSrc);
-
-  // Video metadata (fallback mode)
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    if (framesDir && frameCount && frameCount >= 2) return; // using frames
-
-    const onLoaded = () => {
-      const d = Number(video.duration || 0);
-      setDuration(d);
-      setReady(d > 0);
-
-      try {
-        video.currentTime = 0;
-      } catch {
-        // ignore
-      }
-    };
-
-    const onError = () => setVideoFailed(true);
-
-    video.addEventListener('loadedmetadata', onLoaded);
-    video.addEventListener('error', onError);
-
-    const tryPrime = async () => {
-      try {
-        video.muted = true;
-        await video.play();
-        video.pause();
-      } catch {
-        // ignore
-      }
-    };
-
-    const onCanPlay = () => {
-      tryPrime();
-    };
-    video.addEventListener('canplay', onCanPlay);
-
-    return () => {
-      video.removeEventListener('loadedmetadata', onLoaded);
-      video.removeEventListener('error', onError);
-      video.removeEventListener('canplay', onCanPlay);
-    };
-  }, [framesDir, frameCount]);
-
-  useEffect(() => {
-    const section = sectionRef.current;
-    const video = videoRef.current;
-    if (!section) return;
-
-    // Resolve stickyTop: if not provided, read from header css var
-    const resolveStickyTop = () => {
-      if (typeof stickyTopPx === 'number') return stickyTopPx;
-      const raw = getComputedStyle(document.documentElement).getPropertyValue('--site-header-h').trim();
-      const n = Number(raw.replace('px', ''));
-      return Number.isFinite(n) && n > 0 ? n : 96;
-    };
-
-    // Keep stickyTop updated (avoid setState inside rAF loop)
-    const applyStickyTop = () => {
-      const topPx = resolveStickyTop();
-      setStickyTop(topPx);
-    };
-    applyStickyTop();
-    window.addEventListener('resize', applyStickyTop);
-
-    const computeProgress = () => {
-      const topPx = resolveStickyTop();
-      const viewH = window.innerHeight || 1;
-      const y = window.scrollY || document.documentElement.scrollTop || 0;
-
-      // Use rect-based absolute section top (more robust than offsetTop)
-      const sectionTopAbs = section.getBoundingClientRect().top + y;
-      const sectionH = section.offsetHeight;
-
-      const startY = sectionTopAbs - topPx;
-      const endY = sectionTopAbs + sectionH - viewH;
-      const denom = Math.max(1, endY - startY);
-      return clamp01((y - startY) / denom);
-    };
-
-    let rafLoop: number | null = null;
-    let rafSeek: number | null = null;
-    let lastP = -1;
-
-    const loop = () => {
-      rafLoop = window.requestAnimationFrame(loop);
-      const p = computeProgress();
-
-      // throttle state updates a bit
-      if (Math.abs(p - lastP) > throttleSensitivity) {
-        lastP = p;
-        setProgress(p);
-        setDidInitialTick(true);
-
-        // Keep closed for the first segment, then map to 0..1 for the opening animation
-        const rawOpenP = clamp01((p - openFromProgress) / Math.max(1e-6, 1 - openFromProgress));
-        const openP = Math.pow(rawOpenP, easePower);
-
-        // Frame mode
-        if (framesDir && frameCount && frameCount >= 2) {
-          const idx = Math.round(openP * (frameCount - 1));
-          setFrameIndex(Math.min(frameCount - 1, Math.max(0, idx)));
-        } else if (duration > 0) {
-          // even if `ready` is still false, keep target time updated so
-          // when metadata arrives we can seek immediately
-          const t = Math.min(duration - 0.04, Math.max(0, openP * duration));
-          if (Number.isFinite(t)) targetTimeRef.current = t;
-        }
-      }
-    };
-
-    // Smooth seek loop (helps mobile Safari a lot)
-    const smooth = () => {
-      rafSeek = window.requestAnimationFrame(smooth);
-
-      // No need to smooth-seek when using image frames
-      if (framesDir && frameCount && frameCount >= 2) return;
-      if (!video) return;
-      if (duration <= 0) return;
-
-      const target = targetTimeRef.current;
-      let cur = currentTimeRef.current;
-      cur = cur + (target - cur) * smoothFactor;
-      if (Math.abs(target - cur) < 0.015) cur = target;
-
-      currentTimeRef.current = cur;
-      try {
-        video.currentTime = cur;
-      } catch {
-        // ignore
-      }
-    };
-
-    // kick
-    loop();
-    smooth();
-
-    const onResize = () => {
-      // force immediate recompute after viewport changes
-      lastP = -1;
-    };
-    window.addEventListener('resize', onResize);
-
-    return () => {
-      window.removeEventListener('resize', onResize);
-      window.removeEventListener('resize', applyStickyTop);
-      if (rafLoop != null) window.cancelAnimationFrame(rafLoop);
-      if (rafSeek != null) window.cancelAnimationFrame(rafSeek);
-    };
-  }, [duration, stickyTopPx, ready, framesDir, frameCount, openFromProgress]);
-
+  const openProgress = reducedMotion ? 1 : clamp((progress - openFromProgress) / (1 - openFromProgress));
+  const easedProgress = 1 - Math.pow(1 - openProgress, 2.2);
+  const frameIndex = Math.min(effectiveFrameCount - 1, Math.round(easedProgress * (effectiveFrameCount - 1)));
   const activeFeature = useMemo(() => {
-    let chosen = sortedFeatures[0];
-    for (const f of sortedFeatures) {
-      if (progress >= f.at) chosen = f;
-    }
-    return chosen;
-  }, [progress, sortedFeatures]);
+    let current = features[0];
+    for (const feature of features) if (progress >= feature.at) current = feature;
+    return current;
+  }, [features, progress]);
+
+  const icons = [Smartphone, Zap, Camera, Box];
 
   return (
-    <section
-      ref={sectionRef as any}
-      data-initial-tick={didInitialTick ? '1' : '0'}
-      data-active-feature={activeFeature?.title || ''}
-      className="relative"
-      style={{ height: `${heightVh}vh` }}
-    >
-      <div className="sticky" style={{ top: stickyTop }}>
-        {prefersReducedMotion ? (
-          <div className="relative overflow-hidden rounded-3xl border border-slate-800 bg-black shadow-[0_30px_120px_rgba(0,0,0,0.75)]">
-            {computedFinalSrc ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={computedFinalSrc} alt="Hero" className="w-full h-auto object-contain" />
-            ) : null}
-          </div>
-        ) : (
-          <div className="relative overflow-hidden rounded-3xl border border-slate-800 bg-black shadow-[0_30px_120px_rgba(0,0,0,0.75)]">
-            <div className="relative flex h-[60vh] items-center justify-center md:h-[72vh]">
-              {closedSrc ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={closedImageSrc}
-                  alt="Fechado"
-                  onLoad={() => setClosedReady(true)}
-                  className="absolute left-1/2 top-1/2 z-10 h-[48vh] w-auto max-w-[360px] -translate-x-1/2 -translate-y-1/2 object-contain md:h-[60vh] md:max-w-[680px]"
-                  style={{
-                    opacity: clamp01(1 - clamp01(progress / openFromProgress)),
-                    transform: `translate(-50%, -50%) scale(${1 + Math.max(0, openFromProgress - progress) * 0.6})`,
-                    filter: 'drop-shadow(0 30px 120px rgba(0,0,0,0.75))',
-                  }}
-                />
-              ) : null}
+    <section ref={sectionRef} className="relative" style={{ height: `${heightVh}vh` }} aria-label="Exploração das peças">
+      <div className="sticky top-0 h-screen overflow-hidden bg-black">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_60%_42%,rgba(245,158,11,0.13),transparent_34%)]" />
 
-              {computedFinalSrc && progress >= showPinsFromProgress ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={computedFinalSrc}
-                  alt="Componentes"
-                  className="absolute inset-0 z-30 h-full w-full object-contain"
-                  style={{ filter: 'drop-shadow(0 30px 120px rgba(0,0,0,0.75))' }}
-                />
-              ) : null}
+        <div className="relative mx-auto grid h-full max-w-[1500px] items-center px-5 pt-20 lg:grid-cols-[0.78fr_1.22fr] lg:px-10">
+          <div
+            className="relative z-20 max-w-xl self-end pb-24 transition-all duration-500 lg:self-center lg:pb-0"
+            style={{ opacity: progress > 0.88 ? 0 : 1, transform: `translateY(${progress * -18}px)` }}
+          >
+            <span className="eyebrow">Atacado para lojistas e assistências</span>
+            <h1 className="mt-5 text-balance text-4xl font-extrabold leading-[1.02] tracking-[-0.05em] text-white sm:text-6xl xl:text-7xl">
+              {overlayTitle}
+            </h1>
+            <p className="mt-5 max-w-lg text-base leading-7 text-zinc-400 sm:text-lg">{overlaySubtitle}</p>
+
+            <div className="mt-8 hidden items-center gap-3 text-sm font-semibold text-zinc-400 sm:flex">
+              <span className="grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/5">
+                <ArrowDown size={18} />
+              </span>
+              Role para desmontar
             </div>
+          </div>
 
-            <div
-              className="absolute inset-0 flex items-end transition-opacity duration-300"
-              style={{
-                opacity: progress < showCopyFromProgress ? 0 : progress >= showPinsFromProgress - 0.02 ? 0 : 1,
+          <div className="absolute inset-x-0 top-12 flex h-[56vh] items-center justify-center lg:relative lg:inset-auto lg:h-[82vh]">
+            <div className="absolute h-[72vw] w-[72vw] max-h-[680px] max-w-[680px] rounded-full bg-amber-400/[0.09] blur-3xl lg:h-[45vw] lg:w-[45vw] lg:bg-amber-400/[0.06]" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={frameSrc(reducedMotion ? effectiveFrameCount - 1 : frameIndex)}
+              alt="iPhone desmontado com indicação de tela, câmeras, bateria e conector"
+              onLoad={() => setLoaded(true)}
+              onError={() => {
+                if (!sequenceFallback) setSequenceFallback(true);
               }}
-            >
-              <div className="w-full p-4 md:p-8">
-                <div className="mx-auto w-full max-w-4xl px-4 text-center md:text-left">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
-                    Atacado • Lojistas • Assistências
-                  </div>
-                  <h1 className="mt-4 text-2xl leading-tight font-extrabold tracking-tight text-white sm:text-4xl md:text-5xl">
-                    {overlayTitle}
-                  </h1>
-                  <p className="mt-2 text-sm text-slate-200 sm:text-base">{overlaySubtitle}</p>
-                </div>
-              </div>
+              className={`relative z-10 h-auto w-[94vw] max-w-[620px] select-none mix-blend-screen object-contain transition-opacity duration-300 sm:w-[88vw] lg:w-full lg:max-w-[820px] ${loaded ? 'opacity-100' : 'opacity-0'}`}
+              draggable={false}
+            />
+          </div>
+        </div>
+
+        <div
+          className="pointer-events-none absolute bottom-6 left-1/2 z-30 w-[calc(100%-2rem)] max-w-4xl transition-all duration-300"
+          style={{ opacity: progress > 0.16 && progress < 0.9 ? 1 : 0, transform: `translate(-50%, ${progress > 0.16 ? 0 : 16}px)` }}
+        >
+          <div className="flex items-center gap-4 rounded-2xl border border-white/10 bg-black/70 p-3 shadow-2xl backdrop-blur-xl sm:p-4">
+            {(() => {
+              const index = Math.max(0, features.indexOf(activeFeature));
+              const Icon = icons[index % icons.length];
+              return <Icon className="shrink-0 text-amber-400" size={24} />;
+            })()}
+            <div>
+              <div className="font-bold text-white">{activeFeature.title}</div>
+              <div className="text-sm text-zinc-400">{activeFeature.desc}</div>
+            </div>
+            <div className="ml-auto hidden text-xs font-semibold tabular-nums text-zinc-500 sm:block">
+              {String(frameIndex + 1).padStart(2, '0')} / {effectiveFrameCount}
             </div>
           </div>
-        )}
+        </div>
 
-        {!prefersReducedMotion && (
-          <div className="mx-auto mt-5 max-w-6xl px-2 text-xs text-slate-400">
-            Dica: no celular, role devagar para ver a animação com mais suavidade.
-          </div>
-        )}
+        <div className="absolute bottom-0 left-0 h-1 bg-amber-400 transition-[width]" style={{ width: `${progress * 100}%` }} />
       </div>
     </section>
   );

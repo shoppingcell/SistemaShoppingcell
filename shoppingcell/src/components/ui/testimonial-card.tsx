@@ -6,7 +6,7 @@ export type TestimonialAuthor = {
   avatar?: string;
 };
 
-export function TestimonialCard({ author, text, href, className }: any) {
+export function TestimonialCard({ author, text, className }: any) {
   return (
     <article className={className}>
       <div className="rounded-lg border border-white/6 bg-white/5 p-4 text-left">

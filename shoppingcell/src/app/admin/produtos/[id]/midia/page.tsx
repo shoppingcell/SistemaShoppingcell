@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabaseBrowser as supabase } from '@/lib/supabaseBrowser';
 import { PageHeader } from '@/app/admin/_components/ui/PageHeader';
+import { Trash2 } from 'lucide-react';
 
 type Media = {
   id: string;
@@ -15,6 +16,7 @@ type Media = {
 };
 
 const MEDIA_BUCKET = process.env.NEXT_PUBLIC_SUPABASE_MEDIA_BUCKET || 'product-media';
+const isVideoUrl = (value?: string | null) => Boolean(value && /\.(mp4|webm|mov|m4v)(?:[?#].*)?$/i.test(value));
 
 export default function MidiaProdutoPage() {
   const params = useParams<{ id: string }>();
@@ -33,6 +35,16 @@ export default function MidiaProdutoPage() {
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
 
   const primaryId = useMemo(() => items.find((i) => i.is_primary)?.id ?? null, [items]);
+
+  async function refreshPublicPages() {
+    const response = await fetch(`/api/admin/products/${productId}`, { method: 'POST' });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !result?.ok) {
+      setError(result?.error || 'A mídia foi salva, mas a página pública pode levar até um minuto para atualizar.');
+      return false;
+    }
+    return true;
+  }
 
   async function load() {
     setError(null);
@@ -88,6 +100,7 @@ export default function MidiaProdutoPage() {
     setUrl('');
     setAlt('');
     await load();
+    await refreshPublicPages();
     router.refresh();
     setSaving(false);
   }
@@ -135,6 +148,7 @@ export default function MidiaProdutoPage() {
     setFile(null);
     setAlt('');
     await load();
+    await refreshPublicPages();
     router.refresh();
     setSaving(false);
   }
@@ -158,6 +172,7 @@ export default function MidiaProdutoPage() {
     }
 
     await load();
+    await refreshPublicPages();
     router.refresh();
     setSaving(false);
   }
@@ -167,14 +182,15 @@ export default function MidiaProdutoPage() {
     setSaving(true);
     setError(null);
 
-    const { error } = await supabase.from('product_media').delete().eq('id', id);
-    if (error) {
-      setError(error.message);
+    const { data: deleted, error } = await supabase.from('product_media').delete().eq('id', id).select('id').single();
+    if (error || !deleted?.id) {
+      setError(error?.message || 'Não foi possível confirmar a exclusão da mídia.');
       setSaving(false);
       return;
     }
 
     await load();
+    await refreshPublicPages();
     router.refresh();
     setSaving(false);
   }
@@ -186,7 +202,7 @@ export default function MidiaProdutoPage() {
         title="Mídia do produto"
         subtitle={
           <>
-            Adicione por URL ou envie imagem do celular/PC (upload para o bucket{' '}
+            Adicione por URL ou envie imagem/vídeo do celular ou PC (upload para o bucket{' '}
             <span className="font-mono">{MEDIA_BUCKET}</span>).
           </>
         }
@@ -197,7 +213,7 @@ export default function MidiaProdutoPage() {
         <form onSubmit={onAddUrl} className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950 p-6">
           <div className="text-sm font-semibold text-slate-100">Adicionar por URL</div>
           <label className="text-sm text-slate-200">
-            URL da imagem
+            URL da imagem ou vídeo
             <input
               className="mt-1 w-full rounded-md bg-slate-900 p-3 text-white"
               value={url}
@@ -225,14 +241,14 @@ export default function MidiaProdutoPage() {
           onSubmit={onUploadFile}
           className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950 p-6"
         >
-          <div className="text-sm font-semibold text-slate-100">Enviar imagem (celular/PC)</div>
+          <div className="text-sm font-semibold text-slate-100">Enviar imagem ou vídeo (celular/PC)</div>
 
           <label className="text-sm text-slate-200">
             Arquivo
             <input
               className="mt-1 w-full rounded-md bg-slate-900 p-3 text-white file:mr-4 file:rounded-md file:border-0 file:bg-slate-800 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-slate-200 hover:file:bg-slate-700"
               type="file"
-              accept="image/*"
+              accept="image/*,video/mp4,video/webm,video/quicktime"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               disabled={saving}
             />
@@ -241,12 +257,12 @@ export default function MidiaProdutoPage() {
           {filePreviewUrl && (
             <div className="rounded-lg border border-slate-800 bg-slate-900/30 p-3">
               <div className="text-xs text-slate-400">Prévia</div>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={filePreviewUrl}
-                alt={alt || 'Prévia'}
-                className="mt-2 h-44 w-auto max-w-full rounded-md object-contain"
-              />
+              {file?.type.startsWith('video/') ? (
+                <video src={filePreviewUrl} controls muted playsInline className="mt-2 h-44 w-full rounded-md bg-black object-contain" />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={filePreviewUrl} alt={alt || 'Prévia'} className="mt-2 h-44 w-auto max-w-full rounded-md object-contain" />
+              )}
               <div className="mt-2 text-xs text-slate-400">{file?.name}</div>
             </div>
           )}
@@ -264,7 +280,7 @@ export default function MidiaProdutoPage() {
             disabled={saving || !file}
             className="rounded-md bg-yellow-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-yellow-400 disabled:opacity-60"
           >
-            Enviar imagem
+            Enviar mídia
           </button>
 
           <div className="text-xs text-slate-400">
@@ -288,23 +304,27 @@ export default function MidiaProdutoPage() {
             {items.map((m) => (
               <div
                 key={m.id}
-                className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/30 p-3"
+                className="grid min-w-0 gap-3 rounded-xl border border-slate-800 bg-slate-900/30 p-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center"
               >
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="h-12 w-12 overflow-hidden rounded-lg border border-slate-800 bg-slate-900/50">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                <div className="h-20 w-20 overflow-hidden rounded-lg border border-slate-800 bg-slate-900/50">
+                  {isVideoUrl(m.url) ? (
+                    <video src={m.url} muted playsInline preload="metadata" className="h-full w-full object-contain" />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={m.url} alt={m.alt ?? 'Mídia'} className="h-full w-full object-contain" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="truncate text-sm text-slate-200">{m.url}</div>
-                    <div className="text-xs text-slate-400">{m.alt ?? '—'}</div>
-                  </div>
+                  )}
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="min-w-0">
+                  <div className="text-xs font-extrabold uppercase tracking-wider text-yellow-400">{isVideoUrl(m.url) ? 'Vídeo' : 'Imagem'}</div>
+                  <div className="mt-1 truncate text-sm text-slate-200" title={m.url}>{m.url}</div>
+                  <div className="mt-1 text-xs text-slate-400">{m.alt ?? 'Sem texto alternativo'}</div>
+                </div>
+                <div className="flex min-w-0 flex-col gap-2 border-t border-slate-800 pt-3 sm:col-span-2 sm:flex-row sm:justify-end">
                   <button
+                    type="button"
                     disabled={saving}
                     onClick={() => setPrimary(m.id)}
-                    className={`rounded-md px-3 py-2 text-xs font-semibold ${
+                    className={`min-h-11 rounded-lg px-4 py-2 text-xs font-semibold sm:min-w-36 ${
                       m.id === primaryId
                         ? 'bg-green-600 text-white'
                         : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
@@ -313,11 +333,12 @@ export default function MidiaProdutoPage() {
                     {m.id === primaryId ? 'Principal' : 'Definir principal'}
                   </button>
                   <button
+                    type="button"
                     disabled={saving}
                     onClick={() => remove(m.id)}
-                    className="rounded-md bg-red-950/30 px-3 py-2 text-xs font-semibold text-red-200 hover:bg-red-950/50"
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-red-800 bg-red-950/40 px-4 py-2 text-xs font-bold text-red-200 hover:bg-red-900/50 disabled:opacity-60 sm:min-w-36"
                   >
-                    Remover
+                    <Trash2 size={15} /> Excluir mídia
                   </button>
                 </div>
               </div>

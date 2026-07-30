@@ -1,1 +1,18 @@
-.vercel
+# Vercel project metadata
+.vercel/
+
+# Local secrets, backups, and environment overrides
+.env
+.env.*
+!.env.example
+.local-backups/
+
+# Dependencies and builds
+node_modules/
+.next/
+out/
+
+# Logs and OS files
+*.log
+.DS_Store
+Thumbs.db
