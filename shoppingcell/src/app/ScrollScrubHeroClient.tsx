@@ -125,10 +125,8 @@ export function ScrollScrubHeroClient({
   const icons = [Smartphone, Zap, Camera, Box];
 
   return (
-    <section ref={sectionRef} className="relative" style={{ height: `${heightVh}vh` }} aria-label="Exploração das peças">
+    <section ref={sectionRef} className="relative bg-black" style={{ height: `${heightVh}vh` }} aria-label="Exploração das peças">
       <div className="sticky top-0 h-screen overflow-hidden bg-black">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_60%_42%,rgba(245,158,11,0.13),transparent_34%)]" />
-
         <div className="relative mx-auto grid h-full max-w-[1500px] items-center px-5 pt-20 lg:grid-cols-[0.78fr_1.22fr] lg:px-10">
           <div
             className="relative z-20 max-w-xl self-end pb-24 transition-all duration-500 lg:self-center lg:pb-0"
@@ -148,19 +146,20 @@ export function ScrollScrubHeroClient({
             </div>
           </div>
 
-          <div className="absolute inset-x-0 top-12 flex h-[56vh] items-center justify-center lg:relative lg:inset-auto lg:h-[82vh]">
-            <div className="absolute h-[72vw] w-[72vw] max-h-[680px] max-w-[680px] rounded-full bg-amber-400/[0.09] blur-3xl lg:h-[45vw] lg:w-[45vw] lg:bg-amber-400/[0.06]" />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={frameSrc(reducedMotion ? effectiveFrameCount - 1 : frameIndex)}
-              alt="iPhone desmontado com indicação de tela, câmeras, bateria e conector"
-              onLoad={() => setLoaded(true)}
-              onError={() => {
-                if (!sequenceFallback) setSequenceFallback(true);
-              }}
-              className={`relative z-10 h-auto w-[94vw] max-w-[620px] select-none mix-blend-screen object-contain transition-opacity duration-300 sm:w-[88vw] lg:w-full lg:max-w-[820px] ${loaded ? 'opacity-100' : 'opacity-0'}`}
-              draggable={false}
-            />
+          <div className="absolute inset-x-0 top-8 flex h-[60vh] items-center justify-center lg:relative lg:inset-auto lg:h-[85vh]">
+            <div className="animate-float-soft flex w-full justify-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={frameSrc(reducedMotion ? effectiveFrameCount - 1 : frameIndex)}
+                alt="iPhone desmontado com indicação de tela, câmeras, bateria e conector"
+                onLoad={() => setLoaded(true)}
+                onError={() => {
+                  if (!sequenceFallback) setSequenceFallback(true);
+                }}
+                className={`relative z-10 h-auto w-[98vw] max-w-[700px] select-none object-contain transition-opacity duration-300 sm:w-[94vw] lg:w-full lg:max-w-[940px] ${loaded ? 'opacity-100' : 'opacity-0'}`}
+                draggable={false}
+              />
+            </div>
           </div>
         </div>
 

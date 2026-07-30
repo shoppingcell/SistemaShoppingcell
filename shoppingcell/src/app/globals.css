@@ -19,9 +19,7 @@ body {
   min-height: 100vh;
   margin: 0;
   overflow-x: hidden;
-  background:
-    radial-gradient(circle at 80% -10%, rgba(245, 158, 11, 0.08), transparent 30%),
-    #050505;
+  background: #000000;
   color: var(--foreground);
 }
 button, a, input, textarea { -webkit-tap-highlight-color: transparent; }
@@ -38,12 +36,15 @@ button, a { transition-property: color, background-color, border-color, opacity,
   .field { @apply w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3.5 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-amber-400/50 focus:ring-4 focus:ring-amber-400/10; }
 }
 
-@keyframes float-soft { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes float-soft {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-16px) rotate(0.8deg); }
+}
 @keyframes shimmer-slide { 0% { transform: translateX(-30%); } 100% { transform: translateX(30%); } }
 @keyframes spin-around { to { transform: rotate(1turn); } }
 @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(calc(-100% - var(--gap))); } }
 @keyframes review-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-.animate-float-soft { animation: float-soft 5s ease-in-out infinite; }
+.animate-float-soft { animation: float-soft 4.5s ease-in-out infinite; }
 .animate-shimmer-slide { animation: shimmer-slide var(--speed, 3s) linear infinite; }
 .animate-spin-around { animation: spin-around var(--speed, 3s) linear infinite; }
 .animate-marquee { animation: marquee var(--duration, 40s) linear infinite; }
