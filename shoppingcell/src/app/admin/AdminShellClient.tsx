@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   BarChart3, Boxes, ChevronRight, CircleDollarSign, Contact, FileSpreadsheet,
   Globe, LayoutGrid, LockKeyhole, LogOut, Menu, Package, PanelLeftClose, PanelLeftOpen,
-  ReceiptText, ScanLine, Settings, ShoppingCart, Tags, Users, X,
+  ReceiptText, ScanLine, Settings, ShoppingCart, Smartphone, Tags, Users, X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ComponentType } from 'react';
 
@@ -14,6 +14,7 @@ type NavItem = { href: string; label: string; icon: ComponentType<{ size?: numbe
 
 const navAdmin: NavItem[] = [
   { href: '/admin', label: 'Dashboard', icon: BarChart3 },
+  { href: '/vendedor', label: 'Portal Vendedor', icon: Smartphone },
   { href: '/admin/pdv', label: 'PDV', icon: ScanLine },
   { href: '/admin/pedidos', label: 'Pedidos', icon: ShoppingCart },
   { href: '/admin/produtos', label: 'Produtos', icon: Package },
@@ -29,6 +30,7 @@ const navAdmin: NavItem[] = [
 ];
 
 const navSeller: NavItem[] = [
+  { href: '/vendedor', label: 'Portal Vendedor', icon: Smartphone },
   { href: '/admin/pdv', label: 'PDV', icon: ScanLine },
   { href: '/admin/pedidos', label: 'Pedidos', icon: ShoppingCart },
   { href: '/admin/fiado', label: 'Fiado', icon: ReceiptText },
