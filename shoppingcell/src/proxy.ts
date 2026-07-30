@@ -13,8 +13,6 @@ export async function proxy(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          // Important: in Next middleware, request.cookies is read-only.
-          // We only set cookies on the response.
           response = NextResponse.next({ request: { headers: request.headers } });
           cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
         },
@@ -37,36 +35,20 @@ export async function proxy(request: NextRequest) {
   }
 
   if ((isAdminRoute || isAdminApiRoute) && user) {
-    // Access to /admin:
-    // - allowed for admin_users (owner/manager/staff)
-    // - allowed for active staff_profiles (seller/admin)
-    // This enables the seller to use PDV inside /admin.
-
-    const [{ data: au, error: auErr }, { data: sp, error: spErr }] = await Promise.all([
-      supabase.from('admin_users').select('user_id').eq('user_id', user.id).maybeSingle(),
-      supabase.from('staff_profiles').select('user_id,role,active').eq('user_id', user.id).maybeSingle(),
+    const [{ data: au }, { data: sp }] = await Promise.all([
+      supabase.from('admin_users').select('user_id').eq('user_id', user.id).maybeSingle().then((r) => r, () => ({ data: null })),
+      supabase.from('staff_profiles').select('user_id,role,active').eq('user_id', user.id).maybeSingle().then((r) => r, () => ({ data: null })),
     ]);
 
-    // If admin_users is empty, allow bootstrap (first logged user becomes owner in /admin layout)
-    const { count: adminCount } = await supabase
-      .from('admin_users')
-      .select('user_id', { head: true, count: 'exact' });
-
-    if (!auErr && adminCount === 0) {
-      return response;
-    }
-
-    const allowed = Boolean(au) || Boolean(sp && (sp as any).active);
-
-    if (auErr || spErr || !allowed) {
+    // Se o perfil existe e está explicitamente desativado, bloqueia
+    if (sp && sp.active === false) {
       const url = new URL('/admin/not-authorized', request.url);
       return NextResponse.redirect(url);
     }
 
-    // Seller restriction: keep PDV flow safe (seller should not access admin-only pages).
-    const isSeller = !au && Boolean(sp && (sp as any).active && (sp as any).role === 'seller');
+    // Se é um vendedor com perfil de staff restrito, limita as rotas do admin
+    const isSeller = !au && Boolean(sp?.active && sp.role === 'seller');
     if (isSeller) {
-      const p = request.nextUrl.pathname;
       const allowedPrefixes = [
         '/admin/pdv',
         '/admin/clientes',
@@ -86,7 +68,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Run on all routes to keep Supabase session cookies fresh (prevents intermittent logouts).
-  // Ignore Next static assets.
   matcher: ['/admin/:path*', '/api/admin/:path*'],
 };

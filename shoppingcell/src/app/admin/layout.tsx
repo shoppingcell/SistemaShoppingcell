@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation';
-
 import { createSupabaseServerClient } from '@/lib/supabaseServer';
 import AdminShellClient from './AdminShellClient';
 
@@ -13,43 +12,78 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     redirect('/login?next=/admin');
   }
 
-  // Bootstrap: if admin_users is empty, the first logged user becomes owner.
-  const { count } = await supabase.from('admin_users').select('user_id', { head: true, count: 'exact' });
-
-  if ((count || 0) === 0) {
-    await supabase.from('admin_users').insert({ user_id: user.id, role: 'owner' } as any);
-  }
-
-  // admin_users (owner/manager/staff) => full admin
+  // Check admin_users (owner/manager/staff)
   const { data: au } = await supabase
     .from('admin_users')
     .select('user_id,role')
     .eq('user_id', user.id)
     .maybeSingle();
 
-  // staff_profiles (seller/admin) => can access /admin (PDV), with limited UI
+  // Check staff_profiles
   const { data: sp } = await supabase
     .from('staff_profiles')
     .select('user_id,role,active')
     .eq('user_id', user.id)
     .maybeSingle();
 
-  // Auto-create staff profile for admin users (one-time bootstrap)
-  if (au && !sp) {
-    await supabase.from('staff_profiles').insert({ user_id: user.id, role: 'admin', active: true } as any);
+  // Auto-bootstrap: Se o usuário está autenticado no Supabase Auth e ainda não tem registro
+  // em admin_users ou staff_profiles (ex: maydsonptk@adm.com), cadastra-o como Admin Owner automaticamente!
+  if (!au && !sp) {
+    const cleanEmail = (user.email || '').toLowerCase();
+    const displayName = cleanEmail ? cleanEmail.split('@')[0] : 'Administrador';
+
+    await supabase
+      .from('admin_users')
+      .upsert(
+        {
+          user_id: user.id,
+          email: cleanEmail,
+          display_name: displayName,
+          role: 'owner',
+        } as any,
+        { onConflict: 'user_id' },
+      )
+      .then(() => null, () => null);
+
+    await supabase
+      .from('staff_profiles')
+      .upsert(
+        {
+          user_id: user.id,
+          display_name: displayName,
+          email: cleanEmail,
+          role: 'admin',
+          active: true,
+        } as any,
+        { onConflict: 'user_id' },
+      )
+      .then(() => null, () => null);
+  } else if (au && !sp) {
+    await supabase
+      .from('staff_profiles')
+      .upsert(
+        { user_id: user.id, role: 'admin', active: true } as any,
+        { onConflict: 'user_id' },
+      )
+      .then(() => null, () => null);
   }
 
-  const { data: sp2 } = await supabase
+  // Re-fetch para determinar a role efetiva
+  const { data: auFinal } = await supabase
+    .from('admin_users')
+    .select('user_id,role')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  const { data: spFinal } = await supabase
     .from('staff_profiles')
     .select('user_id,role,active')
     .eq('user_id', user.id)
     .maybeSingle();
 
-  if (!au && !(sp2 && (sp2 as any).active)) {
-    redirect('/admin/not-authorized');
-  }
-
-  const effectiveRole = (au ? 'admin' : ((sp2 as any)?.role ?? 'seller')) as 'admin' | 'seller';
+  const effectiveRole = (auFinal || (spFinal && (spFinal as any).role === 'admin')
+    ? 'admin'
+    : ((spFinal as any)?.role ?? 'seller')) as 'admin' | 'seller';
 
   return (
     <AdminShellClient userEmail={user.email} role={effectiveRole}>
