@@ -23,50 +23,10 @@ export async function POST(req: Request) {
 
     const supabase = await createSupabaseServerClient();
 
-    // 1. Check in staff_profiles by email & pin_code
-    const { data: staff } = await supabase
-      .from('staff_profiles')
-      .select('user_id,display_name,email,role,pin_code')
-      .ilike('email', cleanEmail)
-      .eq('pin_code', cleanPin)
-      .maybeSingle();
-
-    if (staff) {
-      return NextResponse.json({
-        ok: true,
-        seller: {
-          id: staff.user_id,
-          name: staff.display_name || cleanEmail,
-          email: staff.email || cleanEmail,
-          role: staff.role || 'staff',
-        },
-      });
-    }
-
-    // 2. Check in hr_employees by email & pin_code
-    const { data: emp } = await supabase
-      .from('hr_employees')
-      .select('id,name,email,role,pin_code')
-      .ilike('email', cleanEmail)
-      .eq('pin_code', cleanPin)
-      .maybeSingle();
-
-    if (emp) {
-      return NextResponse.json({
-        ok: true,
-        seller: {
-          id: emp.id,
-          name: emp.name,
-          email: emp.email || cleanEmail,
-          role: 'staff',
-        },
-      });
-    }
-
-    // 3. Check in admin_users by email & pin_code
+    // 1. Check in admin_users by email & pin_code (primary source — always has email)
     const { data: adm } = await supabase
       .from('admin_users')
-      .select('user_id,email,role,pin_code')
+      .select('user_id,email,role,pin_code,display_name')
       .ilike('email', cleanEmail)
       .eq('pin_code', cleanPin)
       .maybeSingle();
@@ -76,9 +36,9 @@ export async function POST(req: Request) {
         ok: true,
         seller: {
           id: adm.user_id,
-          name: adm.email || 'Administrador',
-          email: adm.email,
-          role: adm.role || 'owner',
+          name: (adm as any).display_name || cleanEmail.split('@')[0],
+          email: (adm as any).email || cleanEmail,
+          role: adm.role || 'staff',
         },
       });
     }

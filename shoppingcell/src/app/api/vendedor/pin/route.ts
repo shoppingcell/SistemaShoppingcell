@@ -27,102 +27,112 @@ export async function POST(req: Request) {
 
     const supabase = await createSupabaseServerClient();
 
-    // 1. Try to find existing record by email or id across tables to maintain consistent user_id
+    // Resolve a valid UUID for this seller
     let targetId: string = (id && IS_UUID.test(id)) ? id : '';
 
-    if (!targetId) {
-      const { data: existingStaff } = await supabase
-        .from('staff_profiles')
-        .select('user_id')
-        .ilike('email', cleanEmail)
-        .maybeSingle();
-
-      if (existingStaff?.user_id && IS_UUID.test(existingStaff.user_id)) {
-        targetId = existingStaff.user_id;
-      }
-    }
-
-    if (!targetId) {
-      const { data: existingHr } = await supabase
-        .from('hr_employees')
-        .select('id')
-        .ilike('email', cleanEmail)
-        .maybeSingle();
-
-      if (existingHr?.id && IS_UUID.test(existingHr.id)) {
-        targetId = existingHr.id;
-      }
-    }
-
-    if (!targetId) {
+    if (!targetId && cleanEmail) {
+      // Try to find existing record by email in admin_users (the table that has email column)
       const { data: existingAdm } = await supabase
         .from('admin_users')
         .select('user_id')
         .ilike('email', cleanEmail)
         .maybeSingle();
-
       if (existingAdm?.user_id && IS_UUID.test(existingAdm.user_id)) {
         targetId = existingAdm.user_id;
       }
     }
 
-    // Fallback to a brand new valid UUID v4
     if (!targetId) {
       targetId = crypto.randomUUID();
     }
 
     const errors: string[] = [];
 
-    // A. Upsert in hr_employees
-    const { error: hrErr } = await supabase.from('hr_employees').upsert(
-      {
-        id: targetId,
-        name: cleanName || cleanEmail,
-        email: cleanEmail,
-        role: cleanRole,
-        pin_code: cleanPin,
-        status: 'active',
-      } as any,
-      { onConflict: 'id' },
-    );
-    if (hrErr) errors.push(`hr_employees: ${hrErr.message}`);
-
-    // B. Upsert in staff_profiles
-    const { error: staffErr } = await supabase.from('staff_profiles').upsert(
+    // A. Upsert in admin_users (has email, display_name, pin_code, role columns)
+    const { error: admErr } = await supabase.from('admin_users').upsert(
       {
         user_id: targetId,
-        display_name: cleanName || cleanEmail,
         email: cleanEmail,
+        display_name: cleanName || cleanEmail,
         role: cleanRole,
         pin_code: cleanPin,
       } as any,
       { onConflict: 'user_id' },
     );
-    if (staffErr) errors.push(`staff_profiles: ${staffErr.message}`);
+    if (admErr) errors.push(`admin_users: ${admErr.message}`);
 
-    // C. Upsert / Manage in admin_users
-    if (cleanRole === 'owner' || cleanRole === 'manager') {
-      const { error: admErr } = await supabase.from('admin_users').upsert(
-        {
-          user_id: targetId,
-          email: cleanEmail,
-          role: cleanRole,
-          pin_code: cleanPin,
-        } as any,
-        { onConflict: 'user_id' },
-      );
-      if (admErr) errors.push(`admin_users: ${admErr.message}`);
-    } else {
-      // If demoted to staff, remove from admin_users table
-      await supabase.from('admin_users').delete().eq('user_id', targetId);
+    // B. Upsert in staff_profiles — only columns that exist in the table
+    // Try with email/display_name first (requires patch SQL), fall back to basic columns
+    const staffPayloadFull = {
+      user_id: targetId,
+      display_name: cleanName || cleanEmail,
+      email: cleanEmail,
+      role: cleanRole,
+      pin_code: cleanPin,
+      active: true,
+    };
+
+    const staffPayloadBasic = {
+      user_id: targetId,
+      role: cleanRole,
+      pin_code: cleanPin,
+      active: true,
+    };
+
+    const { error: staffErr } = await supabase
+      .from('staff_profiles')
+      .upsert(staffPayloadFull as any, { onConflict: 'user_id' });
+
+    if (staffErr) {
+      // If email/display_name columns don't exist yet, fall back to basic upsert
+      if (staffErr.message.includes("column") && staffErr.message.includes("schema cache")) {
+        const { error: staffErrBasic } = await supabase
+          .from('staff_profiles')
+          .upsert(staffPayloadBasic as any, { onConflict: 'user_id' });
+        if (staffErrBasic) errors.push(`staff_profiles: ${staffErrBasic.message}`);
+      } else {
+        errors.push(`staff_profiles: ${staffErr.message}`);
+      }
     }
 
-    if (errors.length > 0 && errors.every((e) => e.includes('admin_users') || e.includes('staff_profiles'))) {
-      // If at least hr_employees succeeded, we consider it saved!
-      console.warn('Partial warnings while saving seller access:', errors);
-    } else if (errors.length > 0 && hrErr && staffErr) {
+    // C. Upsert in hr_employees — only columns that exist in the table
+    const hrPayloadFull = {
+      id: targetId,
+      name: cleanName || cleanEmail,
+      email: cleanEmail,
+      role: cleanRole,
+      pin_code: cleanPin,
+      status: 'active',
+    };
+
+    const hrPayloadBasic = {
+      id: targetId,
+      name: cleanName || cleanEmail,
+      role: cleanRole,
+      pin_code: cleanPin,
+      status: 'active',
+    };
+
+    const { error: hrErr } = await supabase
+      .from('hr_employees')
+      .upsert(hrPayloadFull as any, { onConflict: 'id' });
+
+    if (hrErr) {
+      // If email column doesn't exist yet, fall back to basic upsert
+      if (hrErr.message.includes("column") && hrErr.message.includes("schema cache")) {
+        const { error: hrErrBasic } = await supabase
+          .from('hr_employees')
+          .upsert(hrPayloadBasic as any, { onConflict: 'id' });
+        if (hrErrBasic) errors.push(`hr_employees: ${hrErrBasic.message}`);
+      } else {
+        errors.push(`hr_employees: ${hrErr.message}`);
+      }
+    }
+
+    // If admin_users failed, nothing was saved at all
+    if (admErr) {
       return NextResponse.json(
-        { ok: false, error: `Não foi possível salvar o cadastro: ${errors.join('; ')}` },
+        { ok: false, error: `Não foi possível salvar: ${errors.join('; ')}` },
         { status: 500 },
       );
     }
@@ -159,9 +169,11 @@ export async function DELETE(req: Request) {
     }
 
     if (cleanEmail) {
-      await supabase.from('hr_employees').delete().ilike('email', cleanEmail);
-      await supabase.from('staff_profiles').delete().ilike('email', cleanEmail);
+      // admin_users always has email column
       await supabase.from('admin_users').delete().ilike('email', cleanEmail);
+      // For other tables, try email column and gracefully ignore if not found
+      await supabase.from('hr_employees').delete().ilike('email', cleanEmail).then(() => null, () => null);
+      await supabase.from('staff_profiles').delete().ilike('email', cleanEmail).then(() => null, () => null);
     }
 
     return NextResponse.json({ ok: true, message: 'Vendedor excluído com sucesso!' });
