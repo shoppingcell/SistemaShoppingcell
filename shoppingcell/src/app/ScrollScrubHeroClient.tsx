@@ -146,7 +146,7 @@ export function ScrollScrubHeroClient({
             </div>
           </div>
 
-          <div className="absolute inset-x-0 top-8 flex h-[60vh] items-center justify-center lg:relative lg:inset-auto lg:h-[85vh]">
+          <div className="absolute inset-x-0 top-2 flex h-[72vh] items-center justify-center lg:relative lg:inset-auto lg:h-[88vh]">
             <div className="animate-float-soft flex w-full justify-center">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -156,7 +156,7 @@ export function ScrollScrubHeroClient({
                 onError={() => {
                   if (!sequenceFallback) setSequenceFallback(true);
                 }}
-                className={`relative z-10 h-auto w-[98vw] max-w-[700px] select-none object-contain transition-opacity duration-300 sm:w-[94vw] lg:w-full lg:max-w-[940px] ${loaded ? 'opacity-100' : 'opacity-0'}`}
+                className={`relative z-10 h-auto w-[115vw] max-w-[850px] scale-125 select-none object-contain transition-all duration-300 sm:w-[105vw] lg:w-full lg:max-w-[1150px] lg:scale-120 xl:scale-125 ${loaded ? 'opacity-100' : 'opacity-0'}`}
                 draggable={false}
               />
             </div>
