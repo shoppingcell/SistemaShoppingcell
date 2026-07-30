@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   BarChart3, Boxes, ChevronRight, CircleDollarSign, Contact, FileSpreadsheet,
   Globe, LayoutGrid, LockKeyhole, LogOut, Menu, Package, PanelLeftClose, PanelLeftOpen,
-  ReceiptText, ScanLine, ShoppingCart, Tags, Users, X,
+  ReceiptText, ScanLine, Settings, ShoppingCart, Tags, Users, X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ComponentType } from 'react';
 
@@ -25,6 +25,7 @@ const navAdmin: NavItem[] = [
   { href: '/admin/rh', label: 'Equipe / RH', icon: Users },
   { href: '/admin/acessos', label: 'Acessos', icon: LockKeyhole },
   { href: '/admin/integracoes/google', label: 'Google Sheets', icon: FileSpreadsheet },
+  { href: '/admin/configuracoes', label: 'Configurações', icon: Settings },
 ];
 
 const navSeller: NavItem[] = [
