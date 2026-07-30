@@ -1,11 +1,12 @@
 import Link from 'next/link';
-
+import { ArrowLeft } from 'lucide-react';
 import { createSupabaseServerClient } from '@/lib/supabaseServer';
+import { PrintReceiptButton } from '@/app/admin/_components/ui/PrintReceiptButton';
 
 export const dynamic = 'force-dynamic';
 
 function money(n: number | null | undefined) {
-  if (n == null) return '—';
+  if (n == null || Number.isNaN(Number(n))) return 'R$ 0.00';
   return `R$ ${Number(n).toFixed(2)}`;
 }
 
@@ -13,8 +14,8 @@ function pmLabel(pm: string | null | undefined) {
   if (!pm) return '—';
   if (pm === 'pix') return 'PIX';
   if (pm === 'dinheiro') return 'Dinheiro';
-  if (pm === 'cartao') return 'Cartão';
-  if (pm === 'fiado') return 'Fiado';
+  if (pm === 'cartao') return 'Cartão de Crédito/Débito';
+  if (pm === 'fiado') return 'Fiado / Prazo';
   return pm;
 }
 
@@ -44,7 +45,7 @@ export default async function OrderReceiptPage({ params }: { params: Promise<{ i
     ? (order as any).customers[0]
     : (order as any)?.customers;
 
-  const customerName = customerRel?.name || order?.customer_name || '—';
+  const customerName = customerRel?.name || order?.customer_name || 'Cliente Geral';
   const customerPhone = customerRel?.phone || order?.customer_phone || '—';
 
   const subtotal = (items ?? []).reduce(
@@ -55,138 +56,183 @@ export default async function OrderReceiptPage({ params }: { params: Promise<{ i
   const discount = Math.max(0, subtotal - total);
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-slate-100">
-      <div className="print:hidden sticky top-0 z-10 border-b border-white/10 bg-neutral-950/90 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-2 px-4 py-3">
-          <div className="text-sm font-extrabold">Comprovante Pedido (80mm)</div>
-          <div className="flex items-center gap-2">
+    <div className="min-h-screen bg-neutral-950 text-slate-100 print:bg-white print:text-black">
+      {/* Action Toolbar (hidden on paper print) */}
+      <div className="print:hidden sticky top-0 z-10 border-b border-white/10 bg-neutral-950/90 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-3">
             <Link
               href={`/admin/pedidos/${id}`}
-              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold hover:bg-white/10"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-white/10"
             >
-              Voltar
+              <ArrowLeft size={15} /> Voltar ao Pedido
             </Link>
-            <button
-              onClick={() => window.print()}
-              className="rounded-xl bg-yellow-400 px-3 py-2 text-xs font-extrabold text-slate-950 hover:bg-yellow-300"
-            >
-              Imprimir
-            </button>
+            <div className="hidden text-xs font-bold text-slate-400 sm:block">
+              Comprovante Térmico (80mm)
+            </div>
           </div>
+          <PrintReceiptButton label="Imprimir Comprovante" />
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-[360px] px-3 py-5 print:p-0">
+      {/* Thermal Receipt Box (80mm width) */}
+      <div className="mx-auto w-full max-w-[380px] px-3 py-6 print:m-0 print:w-full print:max-w-none print:p-0">
         {error ? (
-          <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-200">
-            Erro: {error.message}
+          <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-5 text-sm text-red-200">
+            Erro ao carregar pedido: {error.message}
           </div>
         ) : !order ? (
-          <div className="text-sm text-slate-400">Pedido não encontrado.</div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-sm text-slate-400">
+            Pedido não encontrado ou removido.
+          </div>
         ) : (
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 font-mono text-[12px] leading-5 print:border-none print:bg-transparent print:text-black">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-5 font-mono text-[12px] leading-5 shadow-2xl print:border-none print:bg-white print:p-0 print:text-black print:shadow-none">
+            {/* Store Header */}
             <div className="text-center">
-              <div className="text-[14px] font-extrabold tracking-wide">SHOPPINGCELL</div>
-              <div className="text-[11px] text-slate-400 print:text-black/70">Comprovante de pedido</div>
+              <div className="text-[16px] font-black tracking-wider text-white print:text-black">
+                SHOPPING CELL
+              </div>
+              <div className="mt-0.5 text-[11px] font-semibold text-slate-400 print:text-black">
+                Peças e Assistência Técnica
+              </div>
+              <div className="text-[10px] text-slate-500 print:text-black">
+                Comprovante de Pedido #{(order.id || '').slice(0, 8)}
+              </div>
             </div>
 
-            <div className="my-3 border-t border-dashed border-white/15 print:border-black/40" />
+            <div className="my-3 border-t border-dashed border-white/20 print:border-black" />
 
+            {/* Order Details */}
             <div className="grid gap-1">
               <div className="flex items-start justify-between gap-2">
-                <span className="text-slate-400 print:text-black/70">Pedido</span>
-                <span className="font-bold">{String(order.id).slice(0, 8)}</span>
+                <span className="text-slate-400 print:text-black">Pedido N°:</span>
+                <span className="font-bold text-white print:text-black">
+                  #{String(order.id).slice(0, 8)}
+                </span>
               </div>
               <div className="flex items-start justify-between gap-2">
-                <span className="text-slate-400 print:text-black/70">Data</span>
-                <span className="font-bold">{createdAt}</span>
+                <span className="text-slate-400 print:text-black">Data/Hora:</span>
+                <span className="font-bold text-white print:text-black">{createdAt}</span>
               </div>
               <div className="flex items-start justify-between gap-2">
-                <span className="text-slate-400 print:text-black/70">Cliente</span>
-                <span className="max-w-[210px] text-right font-bold">{customerName}</span>
+                <span className="text-slate-400 print:text-black">Cliente:</span>
+                <span className="max-w-[200px] text-right font-bold text-white print:text-black">
+                  {customerName}
+                </span>
               </div>
               <div className="flex items-start justify-between gap-2">
-                <span className="text-slate-400 print:text-black/70">WhatsApp</span>
-                <span className="font-bold">{customerPhone}</span>
+                <span className="text-slate-400 print:text-black">WhatsApp:</span>
+                <span className="font-bold text-white print:text-black">{customerPhone}</span>
               </div>
             </div>
 
-            <div className="my-3 border-t border-dashed border-white/15 print:border-black/40" />
+            <div className="my-3 border-t border-dashed border-white/20 print:border-black" />
 
-            <div className="text-[12px] font-extrabold">ITENS</div>
+            {/* Item List Header */}
+            <div className="flex items-center justify-between text-[11px] font-black uppercase text-amber-400 print:text-black">
+              <span>ITENS DO PEDIDO</span>
+              <span>VALOR</span>
+            </div>
 
-            <div className="mt-2 grid gap-2">
+            <div className="mt-2 grid gap-2.5">
               {(items ?? []).map((it: any) => (
-                <div key={it.id}>
+                <div key={it.id} className="grid gap-0.5">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate font-bold">{it.products?.name ?? it.product_id}</div>
-                      <div className="text-[11px] text-slate-400 print:text-black/70">
-                        {it.products?.sheet_code ? `Cód: ${it.products.sheet_code} · ` : ''}
-                        {it.quantity}x {money(it.price)}
-                      </div>
-                    </div>
-                    <div className="shrink-0 font-extrabold">
+                    <span className="font-bold text-slate-100 print:text-black">
+                      {it.products?.name ?? it.product_id ?? 'Produto sem nome'}
+                    </span>
+                    <span className="shrink-0 font-extrabold text-white print:text-black">
                       {money(it.total != null ? it.total : Number(it.quantity ?? 0) * Number(it.price ?? 0))}
-                    </div>
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-400 print:text-black">
+                    {it.products?.sheet_code ? `Cód: ${it.products.sheet_code} · ` : ''}
+                    {it.quantity}x {money(it.price)}
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="my-3 border-t border-dashed border-white/15 print:border-black/40" />
+            <div className="my-3 border-t border-dashed border-white/20 print:border-black" />
 
+            {/* Order Totals & Payment Summary */}
             <div className="grid gap-1">
               <div className="flex items-center justify-between">
-                <span className="text-slate-400 print:text-black/70">Status pedido</span>
-                <span className="font-bold">{String(order.status || '').toUpperCase()}</span>
+                <span className="text-slate-400 print:text-black">Status Pedido:</span>
+                <span className="font-bold text-white print:text-black">
+                  {String(order.status || 'Pendente').toUpperCase()}
+                </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-400 print:text-black/70">Status pgto</span>
-                <span className="font-bold">{String(order.payment_status || '').toUpperCase()}</span>
+                <span className="text-slate-400 print:text-black">Status Pgto:</span>
+                <span className="font-bold text-white print:text-black">
+                  {String(order.payment_status || 'Pendente').toUpperCase()}
+                </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-400 print:text-black/70">Forma pgto</span>
-                <span className="font-bold">{pmLabel((order as any).payment_method)}</span>
+                <span className="text-slate-400 print:text-black">Forma de Pgto:</span>
+                <span className="font-bold text-white print:text-black">
+                  {pmLabel((order as any).payment_method)}
+                </span>
               </div>
 
-              <div className="my-2 border-t border-dashed border-white/15 print:border-black/40" />
+              <div className="my-2 border-t border-dashed border-white/20 print:border-black" />
 
               <div className="flex items-center justify-between">
-                <span className="text-slate-400 print:text-black/70">Subtotal</span>
-                <span>{money(subtotal)}</span>
+                <span className="text-slate-400 print:text-black">Subtotal:</span>
+                <span className="print:text-black">{money(subtotal)}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400 print:text-black/70">Desconto</span>
-                <span>{money(discount)}</span>
-              </div>
-              <div className="flex items-center justify-between text-[13px]">
-                <span className="font-extrabold">TOTAL</span>
-                <span className="font-extrabold">{money(total)}</span>
+              {discount > 0 && (
+                <div className="flex items-center justify-between text-green-400 print:text-black">
+                  <span>Desconto:</span>
+                  <span>- {money(discount)}</span>
+                </div>
+              )}
+              <div className="mt-1 flex items-center justify-between text-[14px]">
+                <span className="font-black text-white print:text-black">TOTAL:</span>
+                <span className="font-black text-amber-400 print:text-black">{money(total)}</span>
               </div>
             </div>
 
             {order?.notes ? (
               <>
-                <div className="my-3 border-t border-dashed border-white/15 print:border-black/40" />
-                <div className="text-[11px] text-slate-400 print:text-black/70">Observações</div>
-                <div className="text-[12px]">{String(order.notes)}</div>
+                <div className="my-3 border-t border-dashed border-white/20 print:border-black" />
+                <div className="text-[11px] font-bold text-slate-400 print:text-black">Observações:</div>
+                <div className="mt-0.5 text-[11px] text-slate-200 print:text-black">{String(order.notes)}</div>
               </>
             ) : null}
 
-            <div className="mt-4 text-center text-[11px] text-slate-400 print:text-black/70">
-              Obrigado pela preferência.
+            <div className="my-3 border-t border-dashed border-white/20 print:border-black" />
+
+            <div className="text-center text-[10px] text-slate-400 print:text-black">
+              Obrigado pela preferência!
+              <br />
+              Shopping Cell • www.shoppingcell.tech
             </div>
 
+            {/* Print Styles */}
             <style>{`
               @page {
                 size: 80mm auto;
-                margin: 4mm;
+                margin: 3mm;
               }
-
               @media print {
-                html, body { background: white !important; }
-                .print\\:hidden { display: none !important; }
+                html, body {
+                  background: white !important;
+                  color: black !important;
+                  margin: 0 !important;
+                  padding: 0 !important;
+                }
+                .print\\:hidden {
+                  display: none !important;
+                }
+                * {
+                  color-adjust: exact !important;
+                  -webkit-print-color-adjust: exact !important;
+                  color: black !important;
+                  background: transparent !important;
+                  box-shadow: none !important;
+                }
               }
             `}</style>
           </div>
