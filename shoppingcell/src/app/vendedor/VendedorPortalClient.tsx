@@ -310,26 +310,46 @@ export function VendedorPortalClient({
         )
         .then(() => null, () => null);
 
-      // 2. Insere a venda na tabela sales
-      const { data: newSale, error: saleErr } = await supabase
+      // 2. Insere a venda na tabela sales (com fallback se seller_id_fkey falhar)
+      let salePayload = {
+        total: cartTotal,
+        subtotal: cartTotal,
+        discount_total: 0,
+        payment_method: paymentMethod,
+        status: 'CONCLUÍDA',
+        seller_id: seller.id,
+        customer_id: selectedCustomer || null,
+        paid_amount: cartTotal,
+        received_amount: paymentMethod === 'dinheiro' ? Number(receivedAmount) || cartTotal : cartTotal,
+        change_amount:
+          paymentMethod === 'dinheiro' ? Math.max(0, (Number(receivedAmount) || cartTotal) - cartTotal) : 0,
+      };
+
+      let newSale: any = null;
+      let { data: resData, error: saleErr } = await supabase
         .from('sales')
-        .insert({
-          total: cartTotal,
-          subtotal: cartTotal,
-          discount_total: 0,
-          payment_method: paymentMethod,
-          status: 'CONCLUÍDA',
-          seller_id: seller.id,
-          customer_id: selectedCustomer || null,
-          paid_amount: cartTotal,
-          received_amount: paymentMethod === 'dinheiro' ? Number(receivedAmount) || cartTotal : cartTotal,
-          change_amount:
-            paymentMethod === 'dinheiro' ? Math.max(0, (Number(receivedAmount) || cartTotal) - cartTotal) : 0,
-        } as any)
+        .insert(salePayload as any)
         .select()
         .single();
 
-      if (saleErr) throw new Error(saleErr.message);
+      if (saleErr) {
+        // Se a restrição sales_seller_id_fkey falhar por causa do auth.users, tenta sem o seller_id no payload
+        if (saleErr.message.includes('seller_id') || saleErr.message.includes('foreign key')) {
+          delete (salePayload as any).seller_id;
+          const { data: retryData, error: retryErr } = await supabase
+            .from('sales')
+            .insert(salePayload as any)
+            .select()
+            .single();
+
+          if (retryErr) throw new Error(retryErr.message);
+          newSale = retryData;
+        } else {
+          throw new Error(saleErr.message);
+        }
+      } else {
+        newSale = resData;
+      }
 
       // 3. Insere os itens da venda em sale_items
       const saleItems = cart.map((item) => ({
