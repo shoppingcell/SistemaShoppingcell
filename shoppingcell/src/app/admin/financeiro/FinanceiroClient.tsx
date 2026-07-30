@@ -6,7 +6,6 @@ import { supabaseBrowser as supabase } from '@/lib/supabaseBrowser';
 import { Panel } from '@/app/admin/_components/ui/Panel';
 import { Button } from '@/app/admin/_components/ui/Button';
 import { Input } from '@/app/admin/_components/ui/Input';
-// Select removed (not used)
 import { Modal } from '@/app/admin/_components/ui/Modal';
 import {
   ResponsiveContainer,
@@ -47,7 +46,6 @@ function money(n: number | null | undefined) {
 }
 
 function shortMonthLabel(iso: string) {
-  // yyyy-mm -> Jan
   const [y, m] = iso.split('-');
   const dt = new Date(Number(y), Number(m) - 1, 1);
   return dt.toLocaleString('pt-BR', { month: 'short' }).replace('.', '');
@@ -57,6 +55,13 @@ function shortDay(iso: string) {
   const [, m, d] = String(iso || '').split('-');
   if (!d) return iso;
   return `${d}/${m}`;
+}
+
+function formatDateBr(isoDateStr: string) {
+  if (!isoDateStr) return '';
+  const [y, m, d] = isoDateStr.split('-');
+  if (!d) return isoDateStr;
+  return `${d}/${m}/${y}`;
 }
 
 function startOfDay(d: Date) {
@@ -87,6 +92,9 @@ export function FinanceiroClient({ txs, payables }: { txs: Tx[]; payables: Payab
 
   const [modal, setModal] = useState<null | 'income' | 'expense' | 'payable'>(null);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Form for transaction / quick payable
   const [form, setForm] = useState({
     amount: '',
     category: '',
@@ -94,7 +102,22 @@ export function FinanceiroClient({ txs, payables }: { txs: Tx[]; payables: Payab
     occurredAt: '',
     dueDate: '',
   });
-  const [error, setError] = useState<string | null>(null);
+
+  // Calendar State & Interactivity
+  const [monthOffset, setMonthOffset] = useState(0);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [editingPayable, setEditingPayable] = useState<Payable | null>(null);
+  const [isAddPayableForDate, setIsAddPayableForDate] = useState(false);
+
+  // Payable Edit/Add Form State
+  const [payableForm, setPayableForm] = useState({
+    id: '',
+    description: '',
+    amount: '',
+    category: '',
+    dueDate: '',
+    status: 'pending',
+  });
 
   const today = useMemo(() => startOfDay(new Date()), []);
   const todayIso = useMemo(() => isoDate(today), [today]);
@@ -115,7 +138,6 @@ export function FinanceiroClient({ txs, payables }: { txs: Tx[]; payables: Payab
   );
 
   const cashflowLast6Months = useMemo(() => {
-    // Build monthly buckets for last 6 months including current
     const buckets: { key: string; income: number; expense: number; profit: number }[] = [];
     const base = new Date(today.getFullYear(), today.getMonth(), 1);
 
@@ -175,27 +197,55 @@ export function FinanceiroClient({ txs, payables }: { txs: Tx[]; payables: Payab
       .sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)));
   }, [payables, payablesFilter, today, todayIso]);
 
+  // Calendar Calculation with Interactive Cells and Month Offset
   const calendar = useMemo(() => {
-    // Minimal monthly calendar for due_date markers
-    const base = new Date(today.getFullYear(), today.getMonth(), 1);
+    const base = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
     const startWeekday = base.getDay(); // 0 Sunday
     const firstCell = addDays(base, -startWeekday);
 
-    const cells: { date: string; inMonth: boolean; pendingTotal: number; pendingCount: number }[] = [];
+    const cells: {
+      date: string;
+      inMonth: boolean;
+      isToday: boolean;
+      pendingTotal: number;
+      pendingCount: number;
+      paidCount: number;
+      totalCount: number;
+      items: Payable[];
+    }[] = [];
+
     for (let i = 0; i < 42; i++) {
       const d = addDays(firstCell, i);
       const ds = isoDate(d);
       const inMonth = d.getMonth() === base.getMonth();
-      const items = payables.filter((p) => p.status === 'pending' && p.due_date === ds);
-      const pendingTotal = items.reduce((a, p) => a + Number(p.amount || 0), 0);
-      cells.push({ date: ds, inMonth, pendingTotal, pendingCount: items.length });
+      const isToday = ds === todayIso;
+      const dayItems = payables.filter((p) => p.due_date === ds);
+      const pendingItems = dayItems.filter((p) => p.status === 'pending');
+      const paidItems = dayItems.filter((p) => p.status === 'paid');
+      const pendingTotal = pendingItems.reduce((a, p) => a + Number(p.amount || 0), 0);
+
+      cells.push({
+        date: ds,
+        inMonth,
+        isToday,
+        pendingTotal,
+        pendingCount: pendingItems.length,
+        paidCount: paidItems.length,
+        totalCount: dayItems.length,
+        items: dayItems,
+      });
     }
 
     return {
       monthLabel: base.toLocaleString('pt-BR', { month: 'long', year: 'numeric' }),
       cells,
     };
-  }, [payables, today]);
+  }, [payables, today, todayIso, monthOffset]);
+
+  const selectedDateItems = useMemo(() => {
+    if (!selectedDate) return [];
+    return payables.filter((p) => p.due_date === selectedDate);
+  }, [payables, selectedDate]);
 
   const pieColors = ['#22c55e', '#f97316', '#ef4444', '#a855f7', '#06b6d4', '#facc15', '#3b82f6', '#94a3b8'];
 
@@ -213,7 +263,7 @@ export function FinanceiroClient({ txs, payables }: { txs: Tx[]; payables: Payab
       type: kind,
       category: form.category.trim() || null,
       description: form.description.trim() || null,
-      amount: Number(form.amount),
+      amount: Number(form.amount.replace(',', '.')),
       occurred_at,
     });
 
@@ -239,7 +289,7 @@ export function FinanceiroClient({ txs, payables }: { txs: Tx[]; payables: Payab
       status: 'pending',
       category: form.category.trim() || null,
       description: form.description.trim() || null,
-      amount: Number(form.amount),
+      amount: Number(form.amount.replace(',', '.')),
       due_date: form.dueDate,
     });
 
@@ -272,6 +322,101 @@ export function FinanceiroClient({ txs, payables }: { txs: Tx[]; payables: Payab
 
     router.refresh();
     setSaving(false);
+  }
+
+  // Handle Save Payable (Create or Update)
+  async function handleSavePayable(e: React.FormEvent) {
+    e.preventDefault();
+    if (!payableForm.amount.trim() || !payableForm.dueDate.trim()) {
+      setError('Informe o valor e a data de vencimento.');
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    const payload = {
+      description: payableForm.description.trim() || null,
+      category: payableForm.category.trim() || null,
+      amount: Number(payableForm.amount.replace(',', '.')),
+      due_date: payableForm.dueDate,
+      status: payableForm.status || 'pending',
+      paid_at: payableForm.status === 'paid' ? new Date().toISOString() : null,
+    };
+
+    let err: any = null;
+    if (payableForm.id) {
+      const { error: updateError } = await supabase
+        .from('finance_payables')
+        .update(payload)
+        .eq('id', payableForm.id);
+      err = updateError;
+    } else {
+      const { error: insertError } = await supabase
+        .from('finance_payables')
+        .insert(payload);
+      err = insertError;
+    }
+
+    if (err) {
+      setError(err.message || 'Erro ao salvar a conta');
+      setSaving(false);
+      return;
+    }
+
+    setEditingPayable(null);
+    setIsAddPayableForDate(false);
+    setSaving(false);
+    router.refresh();
+  }
+
+  // Handle Delete Payable
+  async function handleDeletePayable(id: string) {
+    if (!window.confirm('Tem certeza que deseja excluir esta conta a pagar?')) return;
+
+    setSaving(true);
+    setError(null);
+
+    const { error: deleteErr } = await supabase
+      .from('finance_payables')
+      .delete()
+      .eq('id', id);
+
+    if (deleteErr) {
+      setError(deleteErr.message || 'Erro ao excluir conta');
+      setSaving(false);
+      return;
+    }
+
+    setEditingPayable(null);
+    setSaving(false);
+    router.refresh();
+  }
+
+  function openAddForDate(targetDate: string) {
+    setError(null);
+    setPayableForm({
+      id: '',
+      description: '',
+      amount: '',
+      category: 'Fornecedores',
+      dueDate: targetDate,
+      status: 'pending',
+    });
+    setIsAddPayableForDate(true);
+  }
+
+  function openEditPayable(p: Payable) {
+    setError(null);
+    setPayableForm({
+      id: p.id,
+      description: p.description || '',
+      amount: String(p.amount || ''),
+      category: p.category || '',
+      dueDate: p.due_date || '',
+      status: p.status || 'pending',
+    });
+    setEditingPayable(p);
   }
 
   return (
@@ -358,7 +503,7 @@ export function FinanceiroClient({ txs, payables }: { txs: Tx[]; payables: Payab
 
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Categoria</label>
           <Input
-            placeholder="Fornecedor"
+            placeholder="Fornecedores, Aluguel, etc."
             value={form.category}
             onChange={(e) => setForm({ ...form, category: e.target.value })}
           />
@@ -401,16 +546,9 @@ export function FinanceiroClient({ txs, payables }: { txs: Tx[]; payables: Payab
             onChange={(e) => setForm({ ...form, amount: e.target.value })}
           />
 
-          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Vencimento</label>
-          <Input
-            type="date"
-            value={form.dueDate || todayIso}
-            onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
-          />
-
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Categoria</label>
           <Input
-            placeholder="Aluguel"
+            placeholder="Fornecedores, Aluguel, Energia, etc."
             value={form.category}
             onChange={(e) => setForm({ ...form, category: e.target.value })}
           />
@@ -422,6 +560,15 @@ export function FinanceiroClient({ txs, payables }: { txs: Tx[]; payables: Payab
             onChange={(e) => setForm({ ...form, description: e.target.value })}
           />
 
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Data de Vencimento
+          </label>
+          <Input
+            type="date"
+            value={form.dueDate}
+            onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
+          />
+
           {error && <div className="text-sm text-red-200">{error}</div>}
 
           <Button disabled={saving} type="submit">
@@ -430,23 +577,26 @@ export function FinanceiroClient({ txs, payables }: { txs: Tx[]; payables: Payab
         </form>
       </Modal>
 
-      <div className="flex flex-wrap gap-2">
+      {/* Tabs Header */}
+      <div className="flex gap-2 border-b border-white/10 pb-3">
         <button
           onClick={() => setTab('dashboard')}
           className={
-            'rounded-full px-4 py-2 text-sm font-semibold ' +
-            (tab === 'dashboard' ? 'bg-white/10 text-white' : 'bg-slate-950 text-slate-300 hover:bg-white/5')
+            'rounded-full px-4 py-2 text-xs font-semibold transition ' +
+            (tab === 'dashboard'
+              ? 'bg-yellow-400 text-slate-950 shadow-sm'
+              : 'text-slate-300 hover:bg-white/5')
           }
         >
-          Painel
+          Visão Geral
         </button>
         <button
           onClick={() => setTab('transactions')}
           className={
-            'rounded-full px-4 py-2 text-sm font-semibold ' +
+            'rounded-full px-4 py-2 text-xs font-semibold transition ' +
             (tab === 'transactions'
-              ? 'bg-white/10 text-white'
-              : 'bg-slate-950 text-slate-300 hover:bg-white/5')
+              ? 'bg-yellow-400 text-slate-950 shadow-sm'
+              : 'text-slate-300 hover:bg-white/5')
           }
         >
           Transações
@@ -454,8 +604,10 @@ export function FinanceiroClient({ txs, payables }: { txs: Tx[]; payables: Payab
         <button
           onClick={() => setTab('reports')}
           className={
-            'rounded-full px-4 py-2 text-sm font-semibold ' +
-            (tab === 'reports' ? 'bg-white/10 text-white' : 'bg-slate-950 text-slate-300 hover:bg-white/5')
+            'rounded-full px-4 py-2 text-xs font-semibold transition ' +
+            (tab === 'reports'
+              ? 'bg-yellow-400 text-slate-950 shadow-sm'
+              : 'text-slate-300 hover:bg-white/5')
           }
         >
           Relatórios
@@ -464,39 +616,51 @@ export function FinanceiroClient({ txs, payables }: { txs: Tx[]; payables: Payab
 
       {tab === 'dashboard' && (
         <>
-          <div className="grid gap-4 md:grid-cols-4">
-            <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-slate-950 to-slate-950/60 p-6 shadow-[0_10px_40px_rgba(0,0,0,0.35)]">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Saldo Atual</div>
-              <div className="mt-2 text-3xl font-extrabold text-slate-100">{money(balance)}</div>
-            </div>
-            <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-slate-950 to-slate-950/60 p-6 shadow-[0_10px_40px_rgba(0,0,0,0.35)]">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Receitas Recebidas
+          {/* Top KPI Cards */}
+          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+            <Panel>
+              <div className="p-5">
+                <div className="text-xs font-semibold text-slate-400">Receitas</div>
+                <div className="mt-2 text-2xl font-extrabold text-green-400">{money(income)}</div>
               </div>
-              <div className="mt-2 text-3xl font-extrabold text-green-300">{money(income)}</div>
-            </div>
-            <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-slate-950 to-slate-950/60 p-6 shadow-[0_10px_40px_rgba(0,0,0,0.35)]">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Despesas Pagas
+            </Panel>
+            <Panel>
+              <div className="p-5">
+                <div className="text-xs font-semibold text-slate-400">Despesas</div>
+                <div className="mt-2 text-2xl font-extrabold text-red-400">{money(expense)}</div>
               </div>
-              <div className="mt-2 text-3xl font-extrabold text-red-200">{money(expense)}</div>
-            </div>
-            <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-slate-950 to-slate-950/60 p-6 shadow-[0_10px_40px_rgba(0,0,0,0.35)]">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                A Pagar (Pendente)
+            </Panel>
+            <Panel>
+              <div className="p-5">
+                <div className="text-xs font-semibold text-slate-400">Saldo Líquido</div>
+                <div
+                  className={
+                    'mt-2 text-2xl font-extrabold ' + (balance >= 0 ? 'text-slate-100' : 'text-red-400')
+                  }
+                >
+                  {money(balance)}
+                </div>
               </div>
-              <div className="mt-2 text-3xl font-extrabold text-amber-200">{money(pendingPayablesTotal)}</div>
-            </div>
+            </Panel>
+            <Panel>
+              <div className="p-5">
+                <div className="text-xs font-semibold text-slate-400">A Pagar Pendente</div>
+                <div className="mt-2 text-2xl font-extrabold text-amber-400">
+                  {money(pendingPayablesTotal)}
+                </div>
+              </div>
+            </Panel>
           </div>
 
+          {/* Charts Row */}
           <div className="grid gap-4 lg:grid-cols-3">
             <div className="lg:col-span-2">
               <Panel>
                 <div className="border-b border-white/10 px-6 py-5">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-sm font-semibold text-slate-200">Fluxo de Caixa</div>
-                      <div className="text-xs text-slate-500">Últimos 6 meses</div>
+                      <div className="text-sm font-semibold text-slate-200">Fluxo de Caixa (6 meses)</div>
+                      <div className="mt-1 text-xs text-slate-400">Receitas vs Despesas</div>
                     </div>
                   </div>
                 </div>
@@ -631,6 +795,7 @@ export function FinanceiroClient({ txs, payables }: { txs: Tx[]; payables: Payab
             </div>
           </div>
 
+          {/* Payables List & Interactive Calendar */}
           <div className="grid gap-4 lg:grid-cols-2">
             <Panel>
               <div className="border-b border-white/10 px-6 py-5">
@@ -706,15 +871,23 @@ export function FinanceiroClient({ txs, payables }: { txs: Tx[]; payables: Payab
                             {p.category || 'Outros'} • vence {shortDay(p.due_date)}
                           </div>
                         </div>
-                        <div className="flex shrink-0 items-center gap-3">
+                        <div className="flex shrink-0 items-center gap-2">
                           <div className="text-right">
                             <div className="text-sm font-extrabold text-slate-100">{money(p.amount)}</div>
                             <div className="mt-1 text-xs text-slate-400">pendente</div>
                           </div>
                           <button
+                            title="Editar"
+                            onClick={() => openEditPayable(p)}
+                            className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            title="Baixar como Pago"
                             disabled={saving}
                             onClick={() => void markPayablePaid(p.id)}
-                            className="rounded-full bg-green-500/15 px-4 py-2 text-xs font-semibold text-green-300 hover:bg-green-500/20 disabled:opacity-60"
+                            className="rounded-full bg-green-500/15 px-3 py-1.5 text-xs font-semibold text-green-300 hover:bg-green-500/20 disabled:opacity-60"
                           >
                             Baixar
                           </button>
@@ -726,55 +899,364 @@ export function FinanceiroClient({ txs, payables }: { txs: Tx[]; payables: Payab
               </div>
             </Panel>
 
+            {/* Interactive Calendário de Vencimentos */}
             <Panel>
               <div className="border-b border-white/10 px-6 py-5">
-                <div className="text-sm font-semibold text-slate-200">Calendário de Vencimentos</div>
-                <div className="mt-1 text-xs text-slate-500 capitalize">{calendar.monthLabel}</div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-200">Calendário de Vencimentos</div>
+                    <div className="mt-1 text-xs text-slate-400 capitalize">{calendar.monthLabel}</div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setMonthOffset((m) => m - 1)}
+                      className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-200 hover:bg-white/10"
+                      title="Mês Anterior"
+                    >
+                      ←
+                    </button>
+                    <button
+                      onClick={() => setMonthOffset(0)}
+                      className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-white/10"
+                      title="Mês Atual"
+                    >
+                      Hoje
+                    </button>
+                    <button
+                      onClick={() => setMonthOffset((m) => m + 1)}
+                      className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-200 hover:bg-white/10"
+                      title="Próximo Mês"
+                    >
+                      →
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div className="px-6 py-5">
-                <div className="grid grid-cols-7 gap-2 text-xs text-slate-500">
+                <div className="grid grid-cols-7 gap-2 text-xs font-semibold text-slate-500">
                   {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((d) => (
                     <div key={d} className="text-center">
                       {d}
                     </div>
                   ))}
                 </div>
+
                 <div className="mt-3 grid grid-cols-7 gap-2">
                   {calendar.cells.map((c) => {
                     const day = c.date.split('-')[2];
                     return (
-                      <div
+                      <button
                         key={c.date}
+                        type="button"
+                        onClick={() => setSelectedDate(c.date)}
                         className={
-                          'rounded-xl border p-2 ' +
+                          'group relative min-h-[58px] cursor-pointer rounded-2xl border p-2 text-left transition duration-150 ' +
+                          (c.isToday ? 'ring-2 ring-yellow-400/80 ' : '') +
                           (c.inMonth
-                            ? 'border-white/10 bg-white/5'
-                            : 'border-white/5 bg-slate-950 text-slate-600')
+                            ? 'border-white/10 bg-white/[0.04] hover:border-yellow-400/50 hover:bg-yellow-400/[0.08]'
+                            : 'border-white/5 bg-slate-950 text-slate-600 hover:bg-white/[0.02]')
                         }
                       >
                         <div className="flex items-start justify-between">
-                          <div className="text-xs font-semibold text-slate-200">{Number(day)}</div>
-                          {c.pendingCount > 0 && (
-                            <div className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-200">
-                              {c.pendingCount}
-                            </div>
-                          )}
+                          <span
+                            className={
+                              'text-xs font-bold ' +
+                              (c.isToday
+                                ? 'text-yellow-400 font-extrabold'
+                                : c.inMonth
+                                ? 'text-slate-200 group-hover:text-white'
+                                : 'text-slate-600')
+                            }
+                          >
+                            {Number(day)}
+                          </span>
+
+                          <div className="flex items-center gap-1">
+                            {c.paidCount > 0 && (
+                              <span className="h-1.5 w-1.5 rounded-full bg-green-400" title={`${c.paidCount} pagas`} />
+                            )}
+                            {c.pendingCount > 0 && (
+                              <span className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">
+                                {c.pendingCount}
+                              </span>
+                            )}
+                          </div>
                         </div>
+
                         {c.pendingCount > 0 && (
-                          <div className="mt-1 text-[11px] font-semibold text-slate-300">
+                          <div className="mt-1 truncate text-[10px] font-extrabold text-amber-300">
                             {money(c.pendingTotal)}
                           </div>
                         )}
-                      </div>
+                      </button>
                     );
                   })}
+                </div>
+
+                <div className="mt-4 flex items-center justify-between text-[11px] text-slate-400">
+                  <div className="flex items-center gap-3">
+                    <span className="flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full bg-amber-400" /> Vencimento pendente
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full bg-green-400" /> Pago
+                    </span>
+                  </div>
+                  <span className="text-slate-500">Clique em qualquer dia para ver ou criar vencimentos</span>
                 </div>
               </div>
             </Panel>
           </div>
         </>
       )}
+
+      {/* MODAL 1: Detalhes do Dia Selecionado no Calendário */}
+      <Modal
+        open={Boolean(selectedDate)}
+        title={selectedDate ? `Vencimentos de ${formatDateBr(selectedDate)}` : 'Detalhes do Dia'}
+        onClose={() => setSelectedDate(null)}
+      >
+        {selectedDate && (
+          <div className="grid gap-4">
+            <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3">
+              <div>
+                <div className="text-xs text-slate-400">Data selecionada</div>
+                <div className="text-sm font-bold text-slate-100">{formatDateBr(selectedDate)}</div>
+              </div>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  openAddForDate(selectedDate);
+                }}
+              >
+                + Novo Vencimento
+              </Button>
+            </div>
+
+            {selectedDateItems.length === 0 ? (
+              <div className="py-8 text-center text-sm text-slate-400">
+                Nenhuma conta cadastrada nesta data.
+                <div className="mt-3">
+                  <Button variant="ghost" onClick={() => openAddForDate(selectedDate)}>
+                    Adicionar Vencimento
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {selectedDateItems.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-100 text-sm">
+                          {p.description || 'Sem descrição'}
+                        </span>
+                        <span
+                          className={
+                            'rounded-full px-2.5 py-0.5 text-[10px] font-bold ' +
+                            (p.status === 'paid'
+                              ? 'bg-green-500/20 text-green-300 border border-green-500/30'
+                              : p.status === 'canceled'
+                              ? 'bg-slate-800 text-slate-400'
+                              : 'bg-amber-500/20 text-amber-300 border border-amber-500/30')
+                          }
+                        >
+                          {p.status === 'paid' ? 'Pago' : p.status === 'canceled' ? 'Cancelado' : 'Pendente'}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-xs text-slate-400">
+                        {p.category || 'Geral'} • Vencimento: {formatDateBr(p.due_date)}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 sm:justify-end">
+                      <div className="text-right font-extrabold text-sm text-slate-100">
+                        {money(p.amount)}
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        {p.status === 'pending' && (
+                          <button
+                            title="Baixar como Pago"
+                            disabled={saving}
+                            onClick={() => void markPayablePaid(p.id)}
+                            className="rounded-xl bg-green-500/20 px-3 py-1.5 text-xs font-bold text-green-300 hover:bg-green-500/30 border border-green-500/30"
+                          >
+                            Baixar
+                          </button>
+                        )}
+                        <button
+                          title="Editar Informações"
+                          onClick={() => openEditPayable(p)}
+                          className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10"
+                        >
+                          ✏️ Editar
+                        </button>
+                        <button
+                          title="Excluir"
+                          disabled={saving}
+                          onClick={() => void handleDeletePayable(p.id)}
+                          className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-500/20"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      {/* MODAL 2: Editar Conta a Pagar */}
+      <Modal
+        open={Boolean(editingPayable)}
+        title="Editar Vencimento"
+        onClose={() => setEditingPayable(null)}
+      >
+        <form className="grid gap-3" onSubmit={handleSavePayable}>
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Descrição / Título *
+          </label>
+          <Input
+            placeholder="Ex: Aluguel, Fornecedor de Telas, Energia"
+            value={payableForm.description}
+            onChange={(e) => setPayableForm({ ...payableForm, description: e.target.value })}
+            required
+          />
+
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Valor (R$) *
+          </label>
+          <Input
+            inputMode="decimal"
+            placeholder="0.00"
+            value={payableForm.amount}
+            onChange={(e) => setPayableForm({ ...payableForm, amount: e.target.value })}
+            required
+          />
+
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Categoria
+          </label>
+          <Input
+            placeholder="Fornecedores, Aluguel, Energia, Salários, Impostos, etc."
+            value={payableForm.category}
+            onChange={(e) => setPayableForm({ ...payableForm, category: e.target.value })}
+          />
+
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Data de Vencimento *
+          </label>
+          <Input
+            type="date"
+            value={payableForm.dueDate}
+            onChange={(e) => setPayableForm({ ...payableForm, dueDate: e.target.value })}
+            required
+          />
+
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Status
+          </label>
+          <select
+            value={payableForm.status}
+            onChange={(e) => setPayableForm({ ...payableForm, status: e.target.value })}
+            className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-slate-100 focus:outline-none focus:ring-2 focus:ring-yellow-400/40"
+          >
+            <option value="pending">Pendente</option>
+            <option value="paid">Pago</option>
+            <option value="canceled">Cancelado</option>
+          </select>
+
+          {error && <div className="text-sm text-red-200">{error}</div>}
+
+          <div className="flex items-center justify-between pt-2">
+            {payableForm.id && (
+              <button
+                type="button"
+                onClick={() => void handleDeletePayable(payableForm.id)}
+                className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-xs font-semibold text-red-300 hover:bg-red-500/20"
+              >
+                Excluir
+              </button>
+            )}
+            <div className="flex gap-2 ml-auto">
+              <Button type="button" variant="ghost" onClick={() => setEditingPayable(null)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? 'Salvando...' : 'Salvar Alterações'}
+              </Button>
+            </div>
+          </div>
+        </form>
+      </Modal>
+
+      {/* MODAL 3: Adicionar Novo Vencimento para uma Data Específica */}
+      <Modal
+        open={isAddPayableForDate}
+        title={`Novo Vencimento — ${formatDateBr(payableForm.dueDate)}`}
+        onClose={() => setIsAddPayableForDate(false)}
+      >
+        <form className="grid gap-3" onSubmit={handleSavePayable}>
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Descrição / Título *
+          </label>
+          <Input
+            placeholder="Ex: Fornecedor de peças, Conta de luz"
+            value={payableForm.description}
+            onChange={(e) => setPayableForm({ ...payableForm, description: e.target.value })}
+            required
+          />
+
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Valor (R$) *
+          </label>
+          <Input
+            inputMode="decimal"
+            placeholder="0.00"
+            value={payableForm.amount}
+            onChange={(e) => setPayableForm({ ...payableForm, amount: e.target.value })}
+            required
+          />
+
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Categoria
+          </label>
+          <Input
+            placeholder="Fornecedores, Aluguel, Energia, Impostos, etc."
+            value={payableForm.category}
+            onChange={(e) => setPayableForm({ ...payableForm, category: e.target.value })}
+          />
+
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Data de Vencimento *
+          </label>
+          <Input
+            type="date"
+            value={payableForm.dueDate}
+            onChange={(e) => setPayableForm({ ...payableForm, dueDate: e.target.value })}
+            required
+          />
+
+          {error && <div className="text-sm text-red-200">{error}</div>}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="ghost" onClick={() => setIsAddPayableForDate(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? 'Criando...' : 'Cadastrar Vencimento'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {tab === 'transactions' && (
         <Panel>
