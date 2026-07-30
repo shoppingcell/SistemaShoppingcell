@@ -27,7 +27,7 @@ export default async function OrderReceiptPage({ params }: { params: Promise<{ i
     supabase
       .from('orders')
       .select(
-        'id,created_at,total,status,payment_status,payment_method,customer_name,customer_phone,notes, customers(name,phone)',
+        'id,created_at,status,payment_status,payment_method,customer_name,customer_phone,notes, customers(name,phone)',
       )
       .eq('id', id)
       .single(),
@@ -52,7 +52,7 @@ export default async function OrderReceiptPage({ params }: { params: Promise<{ i
     (acc: number, it: any) => acc + Number(it.price ?? 0) * Number(it.quantity ?? 0),
     0,
   );
-  const total = Number(order?.total ?? subtotal ?? 0);
+  const total = Number((order as any)?.total ?? subtotal ?? 0);
   const discount = Math.max(0, subtotal - total);
 
   return (
@@ -166,7 +166,7 @@ export default async function OrderReceiptPage({ params }: { params: Promise<{ i
               <div className="flex items-center justify-between">
                 <span className="text-slate-400 print:text-black">Status Pgto:</span>
                 <span className="font-bold text-white print:text-black">
-                  {String(order.payment_status || 'Pendente').toUpperCase()}
+                  {String((order as any).payment_status || 'Pendente').toUpperCase()}
                 </span>
               </div>
               <div className="flex items-center justify-between">
