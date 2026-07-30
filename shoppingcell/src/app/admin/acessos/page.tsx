@@ -13,50 +13,60 @@ export default async function AcessosPage() {
 
   const { data: isOwner } = await supabase.rpc('is_admin_owner');
 
-  const [{ data: staffProfiles }, { data: hrEmployees }, { data: adminUsers }] = await Promise.all([
-    supabase.from('staff_profiles').select('user_id,display_name,email,role,pin_code'),
-    supabase.from('hr_employees').select('id,name,email,role,pin_code'),
-    supabase.from('admin_users').select('user_id,email,role,pin_code'),
+  const [{ data: rawAdmins }, { data: staffProfiles }, { data: hrEmployees }] = await Promise.all([
+    supabase.rpc('list_admin_users').then((r) => r, () => ({ data: [] as any[] })),
+    supabase.from('staff_profiles').select('*').then((r) => r, () => ({ data: [] as any[] })),
+    supabase.from('hr_employees').select('*').then((r) => r, () => ({ data: [] as any[] })),
   ]);
 
   const map = new Map<string, { id: string; name: string; email: string; role: string; pin_code?: string | null }>();
 
-  // 1. Load from hr_employees
-  for (const emp of (hrEmployees as any[]) ?? []) {
-    if (!emp.email) continue;
-    map.set(emp.email.toLowerCase(), {
-      id: emp.id,
-      name: emp.name || emp.email,
-      email: emp.email,
-      role: emp.role || 'staff',
-      pin_code: emp.pin_code || null,
+  // 1. Process list_admin_users RPC (Primary source for Auth Admins like maydsonptk@gmail.com)
+  for (const adm of ((rawAdmins as any[]) ?? [])) {
+    const key = adm.user_id || adm.email || 'adm_' + Math.random();
+    map.set(key, {
+      id: adm.user_id || key,
+      name: adm.email ? adm.email.split('@')[0] : 'Administrador',
+      email: adm.email || '',
+      role: adm.role || 'owner',
+      pin_code: adm.pin_code || null,
     });
   }
 
-  // 2. Load from staff_profiles
-  for (const st of (staffProfiles as any[]) ?? []) {
-    if (!st.email) continue;
-    const existing = map.get(st.email.toLowerCase());
-    map.set(st.email.toLowerCase(), {
-      id: st.user_id || existing?.id || 'st_' + Date.now(),
-      name: st.display_name || existing?.name || st.email,
-      email: st.email,
+  // 2. Process staff_profiles
+  for (const st of ((staffProfiles as any[]) ?? [])) {
+    const key = st.user_id || st.email || 'st_' + Math.random();
+    const existing =
+      map.get(key) ||
+      (st.email ? Array.from(map.values()).find((x) => x.email.toLowerCase() === st.email.toLowerCase()) : null);
+
+    const merged = {
+      id: st.user_id || existing?.id || key,
+      name: st.display_name || existing?.name || st.email || 'Vendedor',
+      email: st.email || existing?.email || '',
       role: st.role || existing?.role || 'staff',
       pin_code: st.pin_code || existing?.pin_code || null,
-    });
+    };
+
+    map.set(merged.id, merged);
   }
 
-  // 3. Load from admin_users
-  for (const adm of (adminUsers as any[]) ?? []) {
-    if (!adm.email) continue;
-    const existing = map.get(adm.email.toLowerCase());
-    map.set(adm.email.toLowerCase(), {
-      id: adm.user_id || existing?.id || 'adm_' + Date.now(),
-      name: existing?.name || adm.email,
-      email: adm.email,
-      role: adm.role || 'owner',
-      pin_code: adm.pin_code || existing?.pin_code || null,
-    });
+  // 3. Process hr_employees
+  for (const emp of ((hrEmployees as any[]) ?? [])) {
+    const key = emp.id || emp.email || 'emp_' + Math.random();
+    const existing =
+      map.get(key) ||
+      (emp.email ? Array.from(map.values()).find((x) => x.email.toLowerCase() === emp.email.toLowerCase()) : null);
+
+    const merged = {
+      id: emp.id || existing?.id || key,
+      name: emp.name || existing?.name || emp.email || 'Funcionário',
+      email: emp.email || existing?.email || '',
+      role: emp.role || existing?.role || 'staff',
+      pin_code: emp.pin_code || existing?.pin_code || null,
+    };
+
+    map.set(merged.id, merged);
   }
 
   const sellers = Array.from(map.values());
