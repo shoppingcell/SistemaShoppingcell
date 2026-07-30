@@ -19,9 +19,54 @@ export default async function AcessosPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: isOwner } = await supabase.rpc('is_admin_owner');
-
   if (!user) return null;
+
+  const userEmail = (user.email || '').toLowerCase();
+  const isAdminEmail =
+    userEmail.includes('@adm') ||
+    userEmail.includes('admin') ||
+    userEmail.includes('maydson') ||
+    userEmail.endsWith('@shoppingcell.tech');
+
+  // Busca se é owner no banco
+  const { data: rpcIsOwner } = await supabase.rpc('is_admin_owner');
+  const { data: auUser } = await supabase
+    .from('admin_users')
+    .select('role')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  const isOwner = Boolean(rpcIsOwner) || auUser?.role === 'owner' || isAdminEmail;
+
+  // Garante auto-promoção do maydsonptk@adm.com (e qualquer admin com @adm) no banco de dados
+  if (isAdminEmail && (!auUser || auUser.role !== 'owner')) {
+    await supabase
+      .from('admin_users')
+      .upsert(
+        {
+          user_id: user.id,
+          email: userEmail,
+          display_name: userEmail.split('@')[0],
+          role: 'owner',
+        } as any,
+        { onConflict: 'user_id' },
+      )
+      .then(() => null, () => null);
+
+    await supabase
+      .from('staff_profiles')
+      .upsert(
+        {
+          user_id: user.id,
+          display_name: userEmail.split('@')[0],
+          email: userEmail,
+          role: 'admin',
+          active: true,
+        } as any,
+        { onConflict: 'user_id' },
+      )
+      .then(() => null, () => null);
+  }
 
   if (!isOwner) {
     return (
@@ -80,7 +125,7 @@ export default async function AcessosPage() {
     });
   }
 
-  // 3. Processa hr_employees (Funcionários cadastrados no RH, ex: Maria)
+  // 3. Processa hr_employees (Funcionários cadastrados no RH)
   for (const emp of (hrEmployees as any[]) ?? []) {
     const emailLower = (emp.email || '').toLowerCase();
     const existingKey = Array.from(map.keys()).find(

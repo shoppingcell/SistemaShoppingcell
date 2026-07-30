@@ -12,6 +12,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     redirect('/login?next=/admin');
   }
 
+  const cleanEmail = (user.email || '').toLowerCase();
+  const displayName = cleanEmail ? cleanEmail.split('@')[0] : 'Administrador';
+  const isAdminEmail =
+    cleanEmail.includes('@adm') ||
+    cleanEmail.includes('admin') ||
+    cleanEmail.includes('maydson') ||
+    cleanEmail.endsWith('@shoppingcell.tech');
+
   // Check admin_users (owner/manager/staff)
   const { data: au } = await supabase
     .from('admin_users')
@@ -26,12 +34,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     .eq('user_id', user.id)
     .maybeSingle();
 
-  // Auto-bootstrap: Se o usuário está autenticado no Supabase Auth e ainda não tem registro
-  // em admin_users ou staff_profiles (ex: maydsonptk@adm.com), cadastra-o como Admin Owner automaticamente!
-  if (!au && !sp) {
-    const cleanEmail = (user.email || '').toLowerCase();
-    const displayName = cleanEmail ? cleanEmail.split('@')[0] : 'Administrador';
-
+  // Auto-bootstrap e promoção de permissões para maydsonptk@adm.com e emails administrativos
+  if (!au || (isAdminEmail && au.role !== 'owner')) {
     await supabase
       .from('admin_users')
       .upsert(
@@ -44,7 +48,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         { onConflict: 'user_id' },
       )
       .then(() => null, () => null);
+  }
 
+  if (!sp || (isAdminEmail && sp.role !== 'admin')) {
     await supabase
       .from('staff_profiles')
       .upsert(
@@ -55,14 +61,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           role: 'admin',
           active: true,
         } as any,
-        { onConflict: 'user_id' },
-      )
-      .then(() => null, () => null);
-  } else if (au && !sp) {
-    await supabase
-      .from('staff_profiles')
-      .upsert(
-        { user_id: user.id, role: 'admin', active: true } as any,
         { onConflict: 'user_id' },
       )
       .then(() => null, () => null);
@@ -81,7 +79,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     .eq('user_id', user.id)
     .maybeSingle();
 
-  const effectiveRole = (auFinal || (spFinal && (spFinal as any).role === 'admin')
+  const effectiveRole = (auFinal || isAdminEmail || (spFinal && (spFinal as any).role === 'admin')
     ? 'admin'
     : ((spFinal as any)?.role ?? 'seller')) as 'admin' | 'seller';
 
