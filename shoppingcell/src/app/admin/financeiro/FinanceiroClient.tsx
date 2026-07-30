@@ -7,6 +7,7 @@ import { Panel } from '@/app/admin/_components/ui/Panel';
 import { Button } from '@/app/admin/_components/ui/Button';
 import { Input } from '@/app/admin/_components/ui/Input';
 import { Modal } from '@/app/admin/_components/ui/Modal';
+import { RelatoriosGerais } from './RelatoriosGerais';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -85,7 +86,19 @@ function isoDate(d: Date) {
   return `${y}-${m}-${dd}`;
 }
 
-export function FinanceiroClient({ txs, payables }: { txs: Tx[]; payables: Payable[] }) {
+export function FinanceiroClient({
+  txs,
+  payables,
+  sales = [],
+  staffProfiles = [],
+  productsInventory = [],
+}: {
+  txs: Tx[];
+  payables: Payable[];
+  sales?: any[];
+  staffProfiles?: any[];
+  productsInventory?: any[];
+}) {
   const router = useRouter();
   const [tab, setTab] = useState<'dashboard' | 'transactions' | 'reports'>('dashboard');
   const [payablesFilter, setPayablesFilter] = useState<'all' | 'overdue' | 'today' | 'week'>('all');
@@ -1319,17 +1332,13 @@ export function FinanceiroClient({ txs, payables }: { txs: Tx[]; payables: Payab
       )}
 
       {tab === 'reports' && (
-        <Panel>
-          <div className="border-b border-white/10 px-6 py-5">
-            <div className="text-sm font-semibold text-slate-200">Relatórios</div>
-            <div className="mt-1 text-xs text-slate-500">
-              (em construção) — aqui vai exportação CSV, DRE, etc.
-            </div>
-          </div>
-          <div className="px-6 py-8 text-sm text-slate-400">
-            Próximo passo: filtros avançados, exportar por período, e relatórios consolidados.
-          </div>
-        </Panel>
+        <RelatoriosGerais
+          txs={txs}
+          payables={payables}
+          sales={sales}
+          staffProfiles={staffProfiles}
+          productsInventory={productsInventory}
+        />
       )}
     </div>
   );
