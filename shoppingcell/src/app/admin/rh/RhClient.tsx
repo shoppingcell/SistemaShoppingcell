@@ -167,31 +167,49 @@ export function RhClient({
     setSaving(true);
     setError(null);
 
+    const cleanName = employeeForm.name.trim();
+    const cleanRole = employeeForm.role.trim() || null;
+    const cleanSalary = employeeForm.salary.trim() ? Number(employeeForm.salary) : null;
+    const cleanHiredAt = employeeForm.hiredAt || null;
+    const cleanStatus = employeeForm.status;
+
     const payload = {
-      name: employeeForm.name.trim(),
-      role: employeeForm.role.trim() || null,
-      salary: employeeForm.salary.trim() ? Number(employeeForm.salary) : null,
-      hired_at: employeeForm.hiredAt || null,
-      status: employeeForm.status,
+      name: cleanName,
+      role: cleanRole,
+      salary: cleanSalary,
+      hired_at: cleanHiredAt,
+      status: cleanStatus,
     };
 
-    let err: any = null;
+    let targetId = editingEmployeeId || crypto.randomUUID();
 
-    if (editingEmployeeId) {
-      const { error: updErr } = await supabase
-        .from('hr_employees')
-        .update(payload)
-        .eq('id', editingEmployeeId);
-      err = updErr;
-    } else {
-      const { error: insErr } = await supabase
-        .from('hr_employees')
-        .insert(payload);
-      err = insErr;
-    }
+    // 1. Inserir ou atualizar na hr_employees
+    const { error: hrErr } = await supabase
+      .from('hr_employees')
+      .upsert({ id: targetId, ...payload }, { onConflict: 'id' });
 
-    if (err) {
-      setError(err.message);
+    // 2. Sincronizar em seller_access (se a tabela existir)
+    try {
+      await supabase
+        .from('seller_access')
+        .upsert(
+          { id: targetId, name: cleanName, role: cleanRole || 'vendedor', active: cleanStatus === 'active' } as any,
+          { onConflict: 'id' },
+        );
+    } catch {}
+
+    // 3. Sincronizar em staff_profiles (se existir)
+    try {
+      await supabase
+        .from('staff_profiles')
+        .upsert(
+          { user_id: targetId, role: cleanRole || 'staff', active: cleanStatus === 'active' } as any,
+          { onConflict: 'user_id' },
+        );
+    } catch {}
+
+    if (hrErr && !hrErr.message.includes('duplicate')) {
+      setError(hrErr.message);
       setSaving(false);
       return;
     }
@@ -208,16 +226,9 @@ export function RhClient({
     setSaving(true);
     setError(null);
 
-    const { error: delErr } = await supabase
-      .from('hr_employees')
-      .delete()
-      .eq('id', id);
-
-    if (delErr) {
-      setError(delErr.message);
-      setSaving(false);
-      return;
-    }
+    try { await supabase.from('hr_employees').delete().eq('id', id); } catch {}
+    try { await supabase.from('seller_access').delete().eq('id', id); } catch {}
+    try { await supabase.from('staff_profiles').delete().eq('user_id', id); } catch {}
 
     router.refresh();
     setSaving(false);
