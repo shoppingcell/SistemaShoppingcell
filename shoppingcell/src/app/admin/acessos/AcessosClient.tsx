@@ -17,8 +17,10 @@ type SellerUser = {
 
 export function AcessosClient({
   sellers: initialSellers,
+  tableReady = true,
 }: {
   sellers: SellerUser[];
+  tableReady?: boolean;
 }) {
   const router = useRouter();
   const [sellersList, setSellersList] = useState<SellerUser[]>(initialSellers);
@@ -159,7 +161,11 @@ export function AcessosClient({
   return (
     <div className="grid gap-6">
       {/* Form: Add or Edit Seller */}
-      <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-xl">
+      <div className={`rounded-3xl border p-6 shadow-xl ${
+        tableReady
+          ? 'border-white/10 bg-white/5'
+          : 'border-amber-500/20 bg-amber-500/5 opacity-60 pointer-events-none select-none'
+      }`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-base font-extrabold text-slate-100">
             <KeyRound size={20} className="text-yellow-400" />

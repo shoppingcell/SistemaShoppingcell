@@ -13,67 +13,7 @@ export default async function AcessosPage() {
 
   const { data: isOwner } = await supabase.rpc('is_admin_owner');
 
-  const [{ data: rawAdmins }, { data: staffProfiles }, { data: hrEmployees }] = await Promise.all([
-    supabase.rpc('list_admin_users').then((r) => r, () => ({ data: [] as any[] })),
-    supabase.from('staff_profiles').select('*').then((r) => r, () => ({ data: [] as any[] })),
-    supabase.from('hr_employees').select('*').then((r) => r, () => ({ data: [] as any[] })),
-  ]);
-
-  const map = new Map<string, { id: string; name: string; email: string; role: string; pin_code?: string | null }>();
-
-  // 1. Process list_admin_users RPC (Primary source for Auth Admins like maydsonptk@gmail.com)
-  for (const adm of ((rawAdmins as any[]) ?? [])) {
-    const key = adm.user_id || adm.email || 'adm_' + Math.random();
-    map.set(key, {
-      id: adm.user_id || key,
-      name: adm.email ? adm.email.split('@')[0] : 'Administrador',
-      email: adm.email || '',
-      role: adm.role || 'owner',
-      pin_code: adm.pin_code || null,
-    });
-  }
-
-  // 2. Process staff_profiles
-  for (const st of ((staffProfiles as any[]) ?? [])) {
-    const key = st.user_id || st.email || 'st_' + Math.random();
-    const existing =
-      map.get(key) ||
-      (st.email ? Array.from(map.values()).find((x) => x.email.toLowerCase() === st.email.toLowerCase()) : null);
-
-    const merged = {
-      id: st.user_id || existing?.id || key,
-      name: st.display_name || existing?.name || st.email || 'Vendedor',
-      email: st.email || existing?.email || '',
-      role: st.role || existing?.role || 'staff',
-      pin_code: st.pin_code || existing?.pin_code || null,
-    };
-
-    map.set(merged.id, merged);
-  }
-
-  // 3. Process hr_employees
-  for (const emp of ((hrEmployees as any[]) ?? [])) {
-    const key = emp.id || emp.email || 'emp_' + Math.random();
-    const existing =
-      map.get(key) ||
-      (emp.email ? Array.from(map.values()).find((x) => x.email.toLowerCase() === emp.email.toLowerCase()) : null);
-
-    const merged = {
-      id: emp.id || existing?.id || key,
-      name: emp.name || existing?.name || emp.email || 'Funcionário',
-      email: emp.email || existing?.email || '',
-      role: emp.role || existing?.role || 'staff',
-      pin_code: emp.pin_code || existing?.pin_code || null,
-    };
-
-    map.set(merged.id, merged);
-  }
-
-  const sellers = Array.from(map.values());
-
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   if (!isOwner) {
     return (
@@ -84,11 +24,39 @@ export default async function AcessosPage() {
           backHref="/admin"
         />
         <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200">
-          Somente o <span className="font-semibold text-yellow-400">Proprietário (Owner)</span> possui autorização para cadastrar, editar ou excluir vendedores.
+          Somente o <span className="font-semibold text-yellow-400">Proprietário (Owner)</span> pode
+          cadastrar, editar ou excluir vendedores.
         </div>
       </div>
     );
   }
+
+  // Carrega da tabela dedicada seller_access
+  const { data: sellerRows, error: sellerErr } = await supabase
+    .from('seller_access')
+    .select('id, name, email, role, pin_code, active')
+    .order('created_at', { ascending: false });
+
+  // Detecta se a tabela ainda não foi criada
+  const tableNotFound =
+    sellerErr &&
+    (sellerErr.message.includes('does not exist') || sellerErr.message.includes('schema cache'));
+
+  type SellerUser = {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    pin_code?: string | null;
+  };
+
+  const sellers: SellerUser[] = ((sellerRows as any[]) ?? []).map((s) => ({
+    id: s.id,
+    name: s.name || s.email,
+    email: s.email,
+    role: s.role || 'staff',
+    pin_code: s.pin_code || null,
+  }));
 
   return (
     <div className="space-y-5">
@@ -98,7 +66,20 @@ export default async function AcessosPage() {
         backHref="/admin"
       />
 
-      <AcessosClient sellers={sellers} />
+      {tableNotFound && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
+          <div className="font-bold">⚠️ Configuração necessária</div>
+          <div className="mt-1 text-xs">
+            Execute o arquivo{' '}
+            <code className="rounded bg-black/40 px-1 py-0.5 font-mono text-yellow-300">
+              supabase/admin_patch_seller_access.sql
+            </code>{' '}
+            no <strong>SQL Editor do Supabase</strong> para habilitar o gerenciamento de vendedores.
+          </div>
+        </div>
+      )}
+
+      <AcessosClient sellers={sellers} tableReady={!tableNotFound} />
     </div>
   );
 }

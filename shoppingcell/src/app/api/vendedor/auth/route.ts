@@ -5,7 +5,7 @@ export async function POST(req: Request) {
   try {
     const { email, pin } = await req.json();
     const cleanEmail = String(email || '').trim().toLowerCase();
-    const cleanPin = String(pin || '').trim();
+    const cleanPin   = String(pin   || '').trim();
 
     if (!cleanEmail || !cleanEmail.includes('@')) {
       return NextResponse.json(
@@ -16,37 +16,58 @@ export async function POST(req: Request) {
 
     if (!cleanPin || cleanPin.length < 4 || cleanPin.length > 6) {
       return NextResponse.json(
-        { ok: false, error: 'O PIN deve conter entre 4 e 6 dígitos numéricos.' },
+        { ok: false, error: 'O PIN deve ter entre 4 e 6 dígitos.' },
         { status: 400 },
       );
     }
 
     const supabase = await createSupabaseServerClient();
 
-    // 1. Check in admin_users by email & pin_code (primary source — always has email)
-    const { data: adm } = await supabase
-      .from('admin_users')
-      .select('user_id,email,role,pin_code,display_name')
+    // Busca na tabela dedicada seller_access
+    const { data: seller, error } = await supabase
+      .from('seller_access')
+      .select('id, name, email, role, active')
       .ilike('email', cleanEmail)
       .eq('pin_code', cleanPin)
       .maybeSingle();
 
-    if (adm) {
-      return NextResponse.json({
-        ok: true,
-        seller: {
-          id: adm.user_id,
-          name: (adm as any).display_name || cleanEmail.split('@')[0],
-          email: (adm as any).email || cleanEmail,
-          role: adm.role || 'staff',
-        },
-      });
+    if (error) {
+      if (error.message.includes('does not exist') || error.message.includes('schema cache')) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              'Banco de dados não configurado. Execute o arquivo supabase/admin_patch_seller_access.sql no SQL Editor do Supabase.',
+          },
+          { status: 500 },
+        );
+      }
+      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json(
-      { ok: false, error: 'E-mail ou PIN de acesso incorretos.' },
-      { status: 401 },
-    );
+    if (!seller) {
+      return NextResponse.json(
+        { ok: false, error: 'E-mail ou PIN incorretos.' },
+        { status: 401 },
+      );
+    }
+
+    if (!seller.active) {
+      return NextResponse.json(
+        { ok: false, error: 'Este acesso está desativado. Contate o administrador.' },
+        { status: 403 },
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      seller: {
+        id:    seller.id,
+        name:  seller.name,
+        email: seller.email,
+        role:  seller.role,
+      },
+    });
   } catch (err: any) {
     return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
   }
