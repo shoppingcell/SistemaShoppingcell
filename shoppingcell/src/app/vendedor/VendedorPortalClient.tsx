@@ -204,6 +204,8 @@ export function VendedorPortalClient({
     );
   }, [search, initialProducts]);
 
+  const [sellerToast, setSellerToast] = useState<string | null>(null);
+
   function addToCart(p: Product) {
     setCart((prev) => {
       const idx = prev.findIndex((item) => item.product.id === p.id);
@@ -214,6 +216,9 @@ export function VendedorPortalClient({
       }
       return [...prev, { product: p, quantity: 1, price: p.price }];
     });
+
+    setSellerToast(`🛒 ${p.name} adicionado ao carrinho!`);
+    window.setTimeout(() => setSellerToast(null), 3000);
   }
 
   function updateQty(productId: string, delta: number) {
@@ -493,6 +498,12 @@ export function VendedorPortalClient({
               </div>
             ) : (
               <>
+                {sellerToast && (
+                  <div className="rounded-2xl border border-yellow-400/40 bg-yellow-400/10 p-3 text-center text-xs font-black text-yellow-300 shadow-lg animate-in fade-in slide-in-from-top-2">
+                    {sellerToast}
+                  </div>
+                )}
+
                 {/* Search & Cart Header */}
                 <div className="relative">
                   <Search size={18} className="absolute left-3.5 top-3.5 text-slate-500" />
