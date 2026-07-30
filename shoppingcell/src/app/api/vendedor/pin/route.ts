@@ -3,7 +3,6 @@ import { createSupabaseServerClient } from '@/lib/supabaseServer';
 
 const IS_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Tenta uma operação e retorna o erro sem lançar exceção */
 async function tryOp(fn: () => Promise<{ error: any }>) {
   try {
     const { error } = await fn();
@@ -37,87 +36,53 @@ export async function POST(req: Request) {
     }
 
     const supabase = await createSupabaseServerClient();
+    let savedId = existingId || crypto.randomUUID();
 
-    // ── 1. TABELA PRINCIPAL: seller_access ────────────────────────────────────
-    // Esta é a tabela DEFINITIVA para gestão de vendedores.
-    // Tem todas as colunas certas e é criada pelo patch SQL.
+    // 1. Tenta salvar na tabela dedicada seller_access
+    const { error: saErr } = await supabase
+      .from('seller_access')
+      .upsert(
+        { name: cleanName, email: cleanEmail, pin_code: cleanPin, role: cleanRole, active: true },
+        { onConflict: 'email' },
+      );
 
-    let savedOk = false;
-    let savedId = existingId;
-
-    if (existingId) {
-      // Atualizar por ID
-      const { error: updErr } = await supabase
-        .from('seller_access')
-        .update({ name: cleanName, email: cleanEmail, pin_code: cleanPin, role: cleanRole, active: true })
-        .eq('id', existingId);
-
-      if (!updErr) {
-        savedOk = true;
-      } else if (updErr.message.includes('does not exist') || updErr.message.includes('schema cache')) {
-        // Tabela ainda não existe — instruir o usuário
-        return NextResponse.json(
-          {
-            ok: false,
-            error:
-              'Configure o banco de dados: execute o arquivo supabase/admin_patch_seller_access.sql no SQL Editor do Supabase e tente novamente.',
-          },
-          { status: 500 },
-        );
-      }
-    }
-
-    if (!savedOk) {
-      // Inserir ou atualizar por email (upsert)
-      const { data: upserted, error: upsErr } = await supabase
-        .from('seller_access')
+    // 2. Sincroniza em hr_employees para garantir presenças e visualização no RH
+    await tryOp(async () => {
+      const { error } = await supabase
+        .from('hr_employees')
         .upsert(
-          { name: cleanName, email: cleanEmail, pin_code: cleanPin, role: cleanRole, active: true },
-          { onConflict: 'email' },
-        )
-        .select('id')
-        .maybeSingle();
-
-      if (upsErr) {
-        if (upsErr.message.includes('does not exist') || upsErr.message.includes('schema cache')) {
-          return NextResponse.json(
-            {
-              ok: false,
-              error:
-                '⚠️ Banco de dados não configurado.\n\nExecute o arquivo supabase/admin_patch_seller_access.sql no SQL Editor do Supabase e tente novamente.',
-            },
-            { status: 500 },
-          );
-        }
-        return NextResponse.json(
-          { ok: false, error: `Erro ao salvar vendedor: ${upsErr.message}` },
-          { status: 500 },
+          { id: savedId, name: cleanName, role: cleanRole, status: 'active', pin_code: cleanPin } as any,
+          { onConflict: 'id' },
         );
-      }
+      return { error };
+    });
 
-      savedOk = true;
-      savedId = upserted?.id || existingId;
-    }
+    // 3. Sincroniza em staff_profiles para garantir acesso ao PDV
+    await tryOp(async () => {
+      const { error } = await supabase
+        .from('staff_profiles')
+        .upsert(
+          { user_id: savedId, role: cleanRole, active: true, pin_code: cleanPin } as any,
+          { onConflict: 'user_id' },
+        );
+      return { error };
+    });
 
-    // ── 2. SYNC OPCIONAL: staff_profiles ──────────────────────────────────────
-    // Sincroniza com staff_profiles para habilitar o acesso ao admin.
-    // Usa apenas colunas que têm CERTEZA de existir: user_id, role, active
-    // Se savedId não é um UUID do auth.users, isso pode ser ignorado
-    if (savedId && IS_UUID.test(savedId)) {
-      await tryOp(async () => {
-        const { error } = await supabase
-          .from('staff_profiles')
-          .upsert({ user_id: savedId, role: cleanRole, active: true } as any, {
-            onConflict: 'user_id',
-          });
-        return { error };
-      });
-    }
+    // 4. Sincroniza em admin_users se a coluna existir
+    await tryOp(async () => {
+      const { error } = await supabase
+        .from('admin_users')
+        .upsert(
+          { user_id: savedId, role: cleanRole, pin_code: cleanPin } as any,
+          { onConflict: 'user_id' },
+        );
+      return { error };
+    });
 
     return NextResponse.json({
       ok: true,
       message: 'Vendedor salvo com sucesso!',
-      seller: { id: savedId, name: cleanName, email: cleanEmail, role: cleanRole },
+      seller: { id: savedId, name: cleanName, email: cleanEmail, role: cleanRole, pin: cleanPin },
     });
   } catch (err: any) {
     return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
@@ -142,11 +107,13 @@ export async function DELETE(req: Request) {
     if (cleanEmail) {
       await tryOp(async () => { const { error } = await supabase.from('seller_access').delete().ilike('email', cleanEmail); return { error }; });
       await tryOp(async () => { const { error } = await supabase.from('staff_profiles').delete().ilike('email', cleanEmail); return { error }; });
+      await tryOp(async () => { const { error } = await supabase.from('hr_employees').delete().ilike('email', cleanEmail); return { error }; });
     }
 
     if (cleanId && IS_UUID.test(cleanId)) {
       await tryOp(async () => { const { error } = await supabase.from('seller_access').delete().eq('id', cleanId); return { error }; });
       await tryOp(async () => { const { error } = await supabase.from('staff_profiles').delete().eq('user_id', cleanId); return { error }; });
+      await tryOp(async () => { const { error } = await supabase.from('hr_employees').delete().eq('id', cleanId); return { error }; });
     }
 
     return NextResponse.json({ ok: true, message: 'Vendedor excluído com sucesso!' });

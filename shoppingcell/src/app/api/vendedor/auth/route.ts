@@ -23,51 +23,73 @@ export async function POST(req: Request) {
 
     const supabase = await createSupabaseServerClient();
 
-    // Busca na tabela dedicada seller_access
-    const { data: seller, error } = await supabase
+    // 1. Tenta buscar em seller_access
+    const { data: seller } = await supabase
       .from('seller_access')
       .select('id, name, email, role, active')
       .ilike('email', cleanEmail)
       .eq('pin_code', cleanPin)
-      .maybeSingle();
+      .maybeSingle()
+      .then((r) => r, () => ({ data: null }));
 
-    if (error) {
-      if (error.message.includes('does not exist') || error.message.includes('schema cache')) {
+    if (seller) {
+      if (!seller.active) {
         return NextResponse.json(
-          {
-            ok: false,
-            error:
-              'Banco de dados não configurado. Execute o arquivo supabase/admin_patch_seller_access.sql no SQL Editor do Supabase.',
-          },
-          { status: 500 },
+          { ok: false, error: 'Este acesso está desativado. Contate o administrador.' },
+          { status: 403 },
         );
       }
-      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+      return NextResponse.json({
+        ok: true,
+        seller: { id: seller.id, name: seller.name, email: seller.email, role: seller.role },
+      });
     }
 
-    if (!seller) {
-      return NextResponse.json(
-        { ok: false, error: 'E-mail ou PIN incorretos.' },
-        { status: 401 },
-      );
+    // 2. Fallback: busca em admin_users
+    const { data: adm } = await supabase
+      .from('admin_users')
+      .select('user_id, email, role, pin_code, display_name')
+      .ilike('email', cleanEmail)
+      .eq('pin_code', cleanPin)
+      .maybeSingle()
+      .then((r) => r, () => ({ data: null }));
+
+    if (adm) {
+      return NextResponse.json({
+        ok: true,
+        seller: {
+          id: adm.user_id,
+          name: (adm as any).display_name || cleanEmail.split('@')[0],
+          email: adm.email || cleanEmail,
+          role: adm.role || 'staff',
+        },
+      });
     }
 
-    if (!seller.active) {
-      return NextResponse.json(
-        { ok: false, error: 'Este acesso está desativado. Contate o administrador.' },
-        { status: 403 },
-      );
+    // 3. Fallback: busca em hr_employees
+    const { data: hr } = await supabase
+      .from('hr_employees')
+      .select('id, name, role, pin_code, email, status')
+      .eq('pin_code', cleanPin)
+      .maybeSingle()
+      .then((r) => r, () => ({ data: null }));
+
+    if (hr) {
+      return NextResponse.json({
+        ok: true,
+        seller: {
+          id: hr.id,
+          name: hr.name,
+          email: (hr as any).email || cleanEmail,
+          role: hr.role || 'staff',
+        },
+      });
     }
 
-    return NextResponse.json({
-      ok: true,
-      seller: {
-        id:    seller.id,
-        name:  seller.name,
-        email: seller.email,
-        role:  seller.role,
-      },
-    });
+    return NextResponse.json(
+      { ok: false, error: 'E-mail ou PIN incorretos.' },
+      { status: 401 },
+    );
   } catch (err: any) {
     return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
   }
