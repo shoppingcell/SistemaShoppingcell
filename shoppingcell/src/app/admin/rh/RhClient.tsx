@@ -67,6 +67,7 @@ export function RhClient({
   const [modal, setModal] = useState<null | 'employee' | 'payment' | 'attendance'>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
 
   const [employeeForm, setEmployeeForm] = useState({
     name: '',
@@ -141,27 +142,83 @@ export function RhClient({
     };
   }, [attendanceByDay, monthCursor]);
 
-  async function createEmployee() {
+  function openNewEmployeeModal() {
+    setEditingEmployeeId(null);
+    setEmployeeForm({ name: '', role: '', salary: '', hiredAt: '', status: 'active' });
+    setError(null);
+    setModal('employee');
+  }
+
+  function openEditEmployeeModal(e: Employee) {
+    setEditingEmployeeId(e.id);
+    setEmployeeForm({
+      name: e.name || '',
+      role: e.role || '',
+      salary: e.salary != null ? String(e.salary) : '',
+      hiredAt: e.hired_at || '',
+      status: e.status || 'active',
+    });
+    setError(null);
+    setModal('employee');
+  }
+
+  async function saveEmployee() {
     if (!employeeForm.name.trim()) return;
     setSaving(true);
     setError(null);
 
-    const { error } = await supabase.from('hr_employees').insert({
+    const payload = {
       name: employeeForm.name.trim(),
       role: employeeForm.role.trim() || null,
       salary: employeeForm.salary.trim() ? Number(employeeForm.salary) : null,
       hired_at: employeeForm.hiredAt || null,
       status: employeeForm.status,
-    });
+    };
 
-    if (error) {
-      setError(error.message);
+    let err: any = null;
+
+    if (editingEmployeeId) {
+      const { error: updErr } = await supabase
+        .from('hr_employees')
+        .update(payload)
+        .eq('id', editingEmployeeId);
+      err = updErr;
+    } else {
+      const { error: insErr } = await supabase
+        .from('hr_employees')
+        .insert(payload);
+      err = insErr;
+    }
+
+    if (err) {
+      setError(err.message);
       setSaving(false);
       return;
     }
 
     setModal(null);
+    setEditingEmployeeId(null);
     setEmployeeForm({ name: '', role: '', salary: '', hiredAt: '', status: 'active' });
+    router.refresh();
+    setSaving(false);
+  }
+
+  async function deleteEmployee(id: string, name: string) {
+    if (!confirm(`Tem certeza que deseja excluir o funcionário "${name}"?`)) return;
+    setSaving(true);
+    setError(null);
+
+    const { error: delErr } = await supabase
+      .from('hr_employees')
+      .delete()
+      .eq('id', id);
+
+    if (delErr) {
+      setError(delErr.message);
+      setSaving(false);
+      return;
+    }
+
     router.refresh();
     setSaving(false);
   }
@@ -279,7 +336,7 @@ export function RhClient({
           <div className="mt-1 text-sm text-slate-400">Funcionários, pagamentos e custos de RH</div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="primary" onClick={() => setModal('employee')}>
+          <Button variant="primary" onClick={openNewEmployeeModal}>
             + Funcionário
           </Button>
           <Button variant="ghost" onClick={() => setModal('payment')}>
@@ -288,12 +345,12 @@ export function RhClient({
         </div>
       </div>
 
-      <Modal open={modal === 'employee'} title="Novo funcionário" onClose={() => setModal(null)}>
+      <Modal open={modal === 'employee'} title={editingEmployeeId ? 'Editar funcionário' : 'Novo funcionário'} onClose={() => setModal(null)}>
         <form
           className="grid gap-3"
           onSubmit={(e) => {
             e.preventDefault();
-            void createEmployee();
+            void saveEmployee();
           }}
         >
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nome</label>
@@ -703,6 +760,7 @@ export function RhClient({
                   <th className="px-6 py-4">Cargo</th>
                   <th className="px-6 py-4">Salário</th>
                   <th className="px-6 py-4">Status</th>
+                  <th className="px-6 py-4 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -723,11 +781,29 @@ export function RhClient({
                         {e.status === 'active' ? 'Ativo' : 'Inativo'}
                       </span>
                     </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openEditEmployeeModal(e)}
+                          className="rounded-xl border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-amber-300 hover:bg-white/10"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void deleteEmployee(e.id, e.name)}
+                          className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-300 hover:bg-red-500/20"
+                        >
+                          Excluir
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {employees.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-6 py-10 text-slate-400">
+                    <td colSpan={5} className="px-6 py-10 text-slate-400">
                       Nenhum funcionário cadastrado ainda.
                     </td>
                   </tr>
