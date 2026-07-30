@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
-export async function POST() {
+export async function POST(req: Request) {
   const cookieStore = await cookies();
 
   const supabase = createServerClient(
@@ -23,5 +23,5 @@ export async function POST() {
   );
 
   await supabase.auth.signOut();
-  return NextResponse.redirect(new URL('/login', 'https://vendedoria.xyz'));
+  return NextResponse.redirect(new URL('/login', req.url));
 }
